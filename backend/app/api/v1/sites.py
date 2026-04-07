@@ -4,9 +4,10 @@ import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.item import Item
 from app.db.models.site import Site, SiteMembership
 from app.db.models.user import User
 from app.deps import CurrentUser, DB, site_role_checker
@@ -46,6 +47,24 @@ async def list_sites(current_user: CurrentUser, db: DB):
     for site, role in rows:
         s = SiteOut.model_validate(site)
         s.role = role
+
+        # item_count
+        item_count_result = await db.execute(
+            select(func.count(Item.id)).where(
+                Item.site_id == site.id, Item.deleted_at.is_(None)
+            )
+        )
+        s.item_count = item_count_result.scalar_one() or 0
+
+        # member_count
+        member_count_result = await db.execute(
+            select(func.count(SiteMembership.id)).where(
+                SiteMembership.site_id == site.id,
+                SiteMembership.accepted_at != None,  # noqa: E711
+            )
+        )
+        s.member_count = member_count_result.scalar_one() or 0
+
         sites_out.append(s)
     return sites_out
 

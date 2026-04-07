@@ -44,7 +44,7 @@ async def _enrich_item(item: Item, db: AsyncSession) -> ItemOut:
         photo_result = await db.execute(select(Photo).where(Photo.id == item.primary_photo_id))
         photo = photo_result.scalar_one_or_none()
         if photo and photo.thumbnail_object_key:
-            out.primary_thumbnail_url = get_presigned_url(
+            out.primary_photo_url = get_presigned_url(
                 settings.minio_bucket_thumbnails, photo.thumbnail_object_key
             )
 
@@ -120,31 +120,42 @@ async def search_items(
     site_id: str,
     db: DB,
     _auth: RequireViewer,
+    # Accept both "search" (frontend) and "q" (legacy)
+    search: str | None = Query(default=None),
     q: str | None = Query(default=None),
     category: str | None = Query(default=None),
     location_id: str | None = Query(default=None),
     owner_user_id: str | None = Query(default=None),
     condition: str | None = Query(default=None),
+    # Accept both "is_verified" (frontend) and "verified" (legacy)
+    is_verified: bool | None = Query(default=None),
     verified: bool | None = Query(default=None),
     tag: str | None = Query(default=None),
     item_type: str | None = Query(default=None),
     sort: str = Query(default="created_at_desc"),
     page: int = Query(default=1, ge=1),
+    # Accept both "size" (frontend) and "per_page" (legacy)
+    size: int | None = Query(default=None, ge=1, le=200),
     per_page: int = Query(default=50, ge=1, le=200),
     updated_since: datetime | None = Query(default=None),
 ):
+    # Merge aliases
+    effective_q = search or q
+    effective_verified = is_verified if is_verified is not None else verified
+    effective_per_page = size if size is not None else per_page
+
     params = ItemSearchParams(
-        q=q,
+        q=effective_q,
         category=category,
         location_id=location_id,
         owner_user_id=owner_user_id,
         condition=condition,
-        verified=verified,
+        verified=effective_verified,
         tag=tag,
         item_type=item_type,
         sort=sort,
         page=page,
-        per_page=per_page,
+        per_page=effective_per_page,
         updated_since=updated_since,
     )
 
@@ -155,14 +166,14 @@ async def search_items(
     )
     total = count_result.scalar_one()
 
-    paged_q = base_q.offset((page - 1) * per_page).limit(per_page)
+    paged_q = base_q.offset((page - 1) * effective_per_page).limit(effective_per_page)
     items_result = await db.execute(paged_q)
     items = items_result.scalars().all()
 
     enriched = [await _enrich_item(item, db) for item in items]
-    pages = math.ceil(total / per_page) if total > 0 else 1
+    pages = math.ceil(total / effective_per_page) if total > 0 else 1
 
-    return PaginatedItems(items=enriched, total=total, page=page, per_page=per_page, pages=pages)
+    return PaginatedItems(items=enriched, total=total, page=page, size=effective_per_page, pages=pages)
 
 
 @router.post("", response_model=ItemOut, status_code=status.HTTP_201_CREATED)
@@ -184,10 +195,14 @@ async def create_item(
         if not loc_result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Location not found")
 
+    # Map frontend field names to DB column names
+    item_data = data.model_dump(exclude={"name", "description"})
     item = Item(
         site_id=site_id,
         created_by=current_user.id,
-        **data.model_dump(),
+        object_name=data.name,
+        short_description=data.description,
+        **item_data,
     )
     db.add(item)
     await db.commit()
@@ -235,8 +250,15 @@ async def update_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    for field, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True, exclude={"name", "description"})
+    for field, value in update_data.items():
         setattr(item, field, value)
+
+    # Handle renamed fields
+    if data.name is not None:
+        item.object_name = data.name
+    if data.description is not None:
+        item.short_description = data.description
 
     audit = AuditLog(
         site_id=site_id,
@@ -396,7 +418,7 @@ async def get_item_movements(
             user_result = await db.execute(select(User).where(User.id == mv.moved_by))
             user = user_result.scalar_one_or_none()
             if user:
-                out.moved_by_display_name = user.display_name
+                out.moved_by_display_name = user.display_name or user.email
         out_list.append(out)
 
     return out_list

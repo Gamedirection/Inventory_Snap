@@ -49,20 +49,20 @@ export function MovementTimeline({ movements }: MovementTimelineProps) {
               <div className="flex-1 pb-2">
                 {/* From → To */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {movement.from_location ? (
+                  {movement.from_location_name ? (
                     <span className="text-xs text-kraft-400">
-                      {movement.from_location.name}
+                      {movement.from_location_name}
                     </span>
                   ) : (
                     <span className="text-xs text-kraft-400 italic">Added</span>
                   )}
-                  {movement.from_location && (
+                  {movement.from_location_name && (
                     <ArrowRight className="w-3 h-3 text-kraft-400 flex-shrink-0" />
                   )}
                   <span
                     className={`text-sm font-medium ${isCurrent ? 'text-kraft-700' : 'text-kraft-500'}`}
                   >
-                    {movement.to_location?.name ?? 'Unassigned'}
+                    {movement.to_location_name ?? 'Unassigned'}
                   </span>
                   {isCurrent && (
                     <span className="tag text-[10px] px-1.5 bg-accent-sage/10 text-accent-sage border-accent-sage/30">
@@ -76,10 +76,14 @@ export function MovementTimeline({ movements }: MovementTimelineProps) {
                   <span className="text-xs text-kraft-400">
                     {formatRelative(movement.moved_at)}
                   </span>
-                  <span className="text-kraft-300">·</span>
-                  <span className="text-xs text-kraft-400">
-                    {movement.moved_by.full_name ?? movement.moved_by.email}
-                  </span>
+                  {movement.moved_by_display_name && (
+                    <>
+                      <span className="text-kraft-300">·</span>
+                      <span className="text-xs text-kraft-400">
+                        {movement.moved_by_display_name}
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 {movement.notes && (

@@ -5,6 +5,7 @@ import type { LocationOut } from '@/lib/types'
 export const locationKeys = {
   all: (siteId: string) => ['locations', siteId] as const,
   tree: (siteId: string) => ['locations', siteId, 'tree'] as const,
+  flat: (siteId: string) => ['locations', siteId, 'flat'] as const,
 }
 
 function buildTree(flat: LocationOut[]): LocationOut[] {
@@ -32,7 +33,7 @@ export function useLocationTree(siteId: string | null) {
       const { data } = await apiClient.get<LocationOut[]>(
         `/api/v1/sites/${siteId}/locations`
       )
-      return buildTree(data)
+      return data
     },
     enabled: !!siteId,
   })
@@ -40,12 +41,23 @@ export function useLocationTree(siteId: string | null) {
 
 export function useLocationFlat(siteId: string | null) {
   return useQuery({
-    queryKey: locationKeys.all(siteId ?? ''),
+    queryKey: locationKeys.flat(siteId ?? ''),
     queryFn: async () => {
-      const { data } = await apiClient.get<LocationOut[]>(
-        `/api/v1/sites/${siteId}/locations`
-      )
-      return data
+      // Call the flat endpoint; fallback to tree endpoint
+      try {
+        const { data } = await apiClient.get<LocationOut[]>(
+          `/api/v1/sites/${siteId}/locations/flat`
+        )
+        return data
+      } catch {
+        const { data } = await apiClient.get<LocationOut[]>(
+          `/api/v1/sites/${siteId}/locations`
+        )
+        // Flatten the tree
+        const flatten = (locs: LocationOut[]): LocationOut[] =>
+          locs.flatMap((l) => [l, ...flatten(l.children ?? [])])
+        return flatten(data)
+      }
     },
     enabled: !!siteId,
   })
@@ -56,19 +68,23 @@ export function useCreateLocation(siteId: string) {
   return useMutation({
     mutationFn: async (payload: {
       name: string
+      level?: string
       parent_id?: string | null
       description?: string
-      floor_level?: number
+      floor_plan_x?: number
+      floor_plan_y?: number
+      order_index?: number
     }) => {
       const { data } = await apiClient.post<LocationOut>(
         `/api/v1/sites/${siteId}/locations`,
-        payload
+        { level: 'room', ...payload }
       )
       return data
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: locationKeys.all(siteId) })
       qc.invalidateQueries({ queryKey: locationKeys.tree(siteId) })
+      qc.invalidateQueries({ queryKey: locationKeys.flat(siteId) })
     },
   })
 }
@@ -78,22 +94,46 @@ export function useUpdateLocation(siteId: string) {
   return useMutation({
     mutationFn: async ({
       locationId,
-      ...payload
+      data: payload,
+      ...rest
     }: {
       locationId: string
+      data?: {
+        name?: string
+        level?: string
+        description?: string
+        floor_plan_x?: number
+        floor_plan_y?: number
+        order_index?: number
+      }
       name?: string
       description?: string
-      floor_level?: number
     }) => {
+      const body = payload ?? rest
       const { data } = await apiClient.patch<LocationOut>(
         `/api/v1/sites/${siteId}/locations/${locationId}`,
-        payload
+        body
       )
       return data
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: locationKeys.all(siteId) })
       qc.invalidateQueries({ queryKey: locationKeys.tree(siteId) })
+      qc.invalidateQueries({ queryKey: locationKeys.flat(siteId) })
+    },
+  })
+}
+
+export function useDeleteLocation(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (locationId: string) => {
+      await apiClient.delete(`/api/v1/sites/${siteId}/locations/${locationId}`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: locationKeys.all(siteId) })
+      qc.invalidateQueries({ queryKey: locationKeys.tree(siteId) })
+      qc.invalidateQueries({ queryKey: locationKeys.flat(siteId) })
     },
   })
 }

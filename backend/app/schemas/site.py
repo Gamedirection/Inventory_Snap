@@ -34,8 +34,10 @@ class SiteOut(BaseModel):
     created_by: str | None
     created_at: datetime
     updated_at: datetime | None
-    # Computed: current user's role
+    # Computed
     role: str | None = None
+    item_count: int = 0
+    member_count: int = 0
 
     model_config = {"from_attributes": True}
 

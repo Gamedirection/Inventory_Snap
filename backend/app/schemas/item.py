@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
 class ItemCreate(BaseModel):
-    object_name: str = Field(max_length=255)
-    short_description: str | None = None
+    name: str = Field(max_length=255)
+    description: str | None = None
     category: str | None = Field(default=None, max_length=100)
     brand: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=100)
-    condition: str = Field(default="unknown", pattern="^(new|excellent|good|fair|poor|unknown)$")
+    condition: str = Field(default="good")
     item_type: str = Field(default="unique", pattern="^(unique|bulk|grouped_set)$")
     location_id: str | None = None
     owner_user_id: str | None = None
@@ -32,10 +33,29 @@ class ItemCreate(BaseModel):
     gps_longitude: float | None = None
 
 
-class ItemUpdate(ItemCreate):
-    object_name: str | None = Field(default=None, max_length=255)  # type: ignore[assignment]
-    condition: str | None = Field(default=None, pattern="^(new|excellent|good|fair|poor|unknown)$")  # type: ignore[assignment]
-    item_type: str | None = Field(default=None, pattern="^(unique|bulk|grouped_set)$")  # type: ignore[assignment]
+class ItemUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    description: str | None = None
+    category: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    condition: str | None = None
+    item_type: str | None = None
+    location_id: str | None = None
+    owner_user_id: str | None = None
+    owner_contact_name: str | None = None
+    quantity: int | None = None
+    serial_numbers: list[str] | None = None
+    barcodes: list[str] | None = None
+    purchase_date: date | None = None
+    purchase_location: str | None = None
+    purchase_price_cents: int | None = None
+    estimated_value_cents: int | None = None
+    currency_code: str | None = None
+    warranty_expires_at: date | None = None
+    warranty_notes: str | None = None
+    notes: str | None = None
+    custom_tags: list[str] | None = None
 
 
 class ItemOut(BaseModel):
@@ -43,8 +63,9 @@ class ItemOut(BaseModel):
     site_id: str
     location_id: str | None
     item_type: str
-    object_name: str
-    short_description: str | None
+    # Frontend-friendly aliases (backend DB uses object_name / short_description)
+    name: str = Field(validation_alias="object_name")
+    description: str | None = Field(None, validation_alias="short_description")
     category: str | None
     brand: str | None
     model: str | None
@@ -75,11 +96,11 @@ class ItemOut(BaseModel):
     sold_at: datetime | None
     lost_at: datetime | None
     deleted_at: datetime | None
-    # Computed
-    primary_thumbnail_url: str | None = None
+    # Computed (populated by _enrich_item)
+    primary_photo_url: str | None = None
     location_path: str | None = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class ItemMoveRequest(BaseModel):
@@ -115,5 +136,5 @@ class PaginatedItems(BaseModel):
     items: list[ItemOut]
     total: int
     page: int
-    per_page: int
+    size: int  # frontend uses "size" not "per_page"
     pages: int

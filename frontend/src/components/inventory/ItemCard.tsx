@@ -87,10 +87,10 @@ export function ItemCard({ item, siteId, selected, onSelect }: ItemCardProps) {
           )}
         </div>
 
-        {item.location && (
+        {item.location_path && (
           <div className="flex items-center gap-1 mt-1.5">
             <MapPin className="w-3 h-3 text-kraft-400 flex-shrink-0" />
-            <p className="text-xs text-kraft-400 truncate">{item.location.path}</p>
+            <p className="text-xs text-kraft-400 truncate">{item.location_path}</p>
           </div>
         )}
       </div>

@@ -14,7 +14,7 @@ class MovementOut(BaseModel):
     moved_at: datetime
     reason: str | None
     notes: str | None
-    # Joined
+    # Flat joined fields (for frontend display)
     from_location_name: str | None = None
     to_location_name: str | None = None
     moved_by_display_name: str | None = None

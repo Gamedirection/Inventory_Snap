@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { LocationPicker } from '@/components/locations/LocationPicker'
 import { useCreateItem, useUpdateItem } from '@/api/hooks/useItems'
-import type { Item } from '@/lib/types'
+import type { ItemOut } from '@/lib/types'
 
 const schema = z.object({
-  object_name: z.string().min(1, 'Name is required').max(255),
-  short_description: z.string().optional(),
+  name: z.string().min(1, 'Name is required').max(255),
+  description: z.string().optional(),
   category: z.string().optional(),
   brand: z.string().optional(),
   model: z.string().optional(),
@@ -34,9 +34,9 @@ const CATEGORIES = ['Electronics', 'Furniture', 'Tools', 'Clothing', 'Books', 'A
 
 interface ItemFormProps {
   siteId: string
-  existing?: Item
+  existing?: ItemOut
   defaultLocationId?: string | null
-  onSuccess?: (item: Item) => void
+  onSuccess?: (item: ItemOut) => void
   onCancel?: () => void
 }
 
@@ -47,8 +47,8 @@ export function ItemForm({ siteId, existing, defaultLocationId, onSuccess, onCan
   const { register, handleSubmit, control, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      object_name: existing?.object_name ?? '',
-      short_description: existing?.short_description ?? '',
+      name: existing?.name ?? '',
+      description: existing?.description ?? '',
       category: existing?.category ?? '',
       brand: existing?.brand ?? '',
       model: existing?.model ?? '',
@@ -111,13 +111,13 @@ export function ItemForm({ siteId, existing, defaultLocationId, onSuccess, onCan
 
         <div>
           <label className="block text-sm font-medium text-kraft-600 mb-1">Name *</label>
-          <input {...register('object_name')} className="input" placeholder="Item name" />
-          {errors.object_name && <p className="text-xs text-accent-rust mt-1">{errors.object_name.message}</p>}
+          <input {...register('name')} className="input" placeholder="Item name" />
+          {errors.name && <p className="text-xs text-accent-rust mt-1">{errors.name.message}</p>}
         </div>
 
         <div>
           <label className="block text-sm font-medium text-kraft-600 mb-1">Description</label>
-          <textarea {...register('short_description')} className="input resize-none" rows={2} />
+          <textarea {...register('description')} className="input resize-none" rows={2} />
         </div>
 
         <div className="grid grid-cols-2 gap-2">

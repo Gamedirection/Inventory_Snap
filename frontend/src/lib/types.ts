@@ -19,9 +19,11 @@ export interface SiteOut {
   name: string
   description: string | null
   address: string | null
-  owner_id: string
-  member_count: number
+  owner_id?: string
+  created_by: string | null
+  role: string | null
   item_count: number
+  member_count: number
   created_at: string
 }
 
@@ -29,9 +31,11 @@ export interface SiteMemberOut {
   id: string
   user_id: string
   site_id: string
-  role: 'owner' | 'admin' | 'member' | 'viewer'
-  user: UserOut
-  joined_at: string
+  role: 'owner' | 'admin' | 'editor' | 'viewer'
+  user_email: string | null
+  user_display_name: string | null
+  accepted_at: string | null
+  created_at: string
 }
 
 // ── Locations ─────────────────────────────────────────────────────────────────
@@ -40,71 +44,90 @@ export interface LocationOut {
   site_id: string
   parent_id: string | null
   name: string
+  level?: string
   description: string | null
-  floor_level: number | null
-  path: string
-  item_count: number
+  floor_level?: number | null
+  floor_plan_x?: number | null
+  floor_plan_y?: number | null
+  path?: string
+  item_count?: number
   children?: LocationOut[]
 }
 
+// Alias for backwards compat with components that import Location
+export type Location = LocationOut
+
 // ── Items ─────────────────────────────────────────────────────────────────────
-export type ItemCondition = 'excellent' | 'good' | 'fair' | 'poor' | 'damaged'
+export type ItemCondition = 'excellent' | 'good' | 'fair' | 'poor' | 'damaged' | 'new' | 'unknown'
 export type ItemStatus = 'active' | 'archived' | 'missing' | 'disposed'
 
 export interface ItemOut {
   id: string
   site_id: string
   location_id: string | null
-  location?: LocationOut | null
+  item_type: string
   name: string
   description: string | null
   category: string | null
-  subcategory: string | null
   brand: string | null
   model: string | null
-  serial_number: string | null
-  asset_tag: string | null
-  condition: ItemCondition
-  status: ItemStatus
+  condition: string
+  owner_user_id: string | null
+  owner_contact_name: string | null
   quantity: number
-  unit: string | null
+  serial_numbers: string[] | null
+  barcodes: string[] | null
   purchase_date: string | null
-  purchase_price: number | null
-  currency: string | null
+  purchase_location: string | null
+  purchase_price_cents: number | null
+  estimated_value_cents: number | null
+  currency_code: string
+  warranty_expires_at: string | null
+  warranty_notes: string | null
   notes: string | null
-  custom_fields: Record<string, unknown> | null
+  custom_tags: string[] | null
+  primary_photo_id: string | null
+  gps_latitude: number | null
+  gps_longitude: number | null
+  confidence_score: number | null
   verification_count: number
-  primary_photo_url: string | null
+  is_verified: boolean
+  created_by: string | null
   created_at: string
-  updated_at: string
+  updated_at: string | null
+  // Computed by backend
+  primary_photo_url: string | null
+  location_path: string | null
 }
 
 export interface ItemMovement {
   id: string
   item_id: string
   from_location_id: string | null
-  to_location_id: string | null
-  from_location?: LocationOut | null
-  to_location?: LocationOut | null
-  moved_by: UserOut
-  notes: string | null
+  to_location_id: string
+  moved_by: string | null
   moved_at: string
+  reason: string | null
+  notes: string | null
+  // Joined flat fields
+  from_location_name: string | null
+  to_location_name: string | null
+  moved_by_display_name: string | null
+  photo_thumbnail_url: string | null
 }
 
 // ── Photos ─────────────────────────────────────────────────────────────────────
-export type PhotoStatus = 'processing' | 'reviewed' | 'approved' | 'rejected'
+export type PhotoAiStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
 export interface PhotoOut {
   id: string
   site_id: string
   location_id: string | null
-  location?: LocationOut | null
   url: string
   thumbnail_url: string | null
-  status: PhotoStatus
-  captured_at: string
-  uploaded_by: UserOut
-  proposal_count: number
+  ai_status: PhotoAiStatus
+  captured_at: string | null
+  location?: { id: string; name: string; path?: string } | null
 }
 
 // ── Review / Proposals ────────────────────────────────────────────────────────
@@ -120,17 +143,24 @@ export interface DetectedObject {
 export interface ProposalOut {
   id: string
   photo_id: string
-  item_id: string | null
+  review_status: string
+  // Frontend-friendly aliases (populated by backend model_validator)
   status: ProposalStatus
-  ai_label: string
+  ai_label: string | null
   ai_confidence: number
   ai_category: string | null
-  detected_objects: DetectedObject[]
-  proposed_fields: Partial<ItemOut>
   duplicate_of_id: string | null
-  reviewed_by: UserOut | null
-  reviewed_at: string | null
+  detected_objects: DetectedObject[]
+  proposed_fields: Partial<{ name: string; description: string; category: string; brand: string; model: string }>
+  // Raw fields
+  object_name: string | null
+  confidence_score: number | null
+  bounding_box: Record<string, number> | null
+  category: string | null
+  brand: string | null
+  model: string | null
   created_at: string
+  reviewed_at: string | null
 }
 
 export interface ReviewQueueItem {
@@ -159,8 +189,7 @@ export interface ItemFilters {
   search?: string
   category?: string
   location_id?: string
-  condition?: ItemCondition
-  status?: ItemStatus
+  condition?: string
   is_verified?: boolean
   page?: number
   size?: number

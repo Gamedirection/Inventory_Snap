@@ -56,7 +56,7 @@ function LocationPickerModal({ siteId, onSelect, onClose }: LocationPickerModalP
               <button
                 onClick={() => { onSelect(loc.id); onClose() }}
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-kraft-100 text-left"
-                style={{ paddingLeft: `${(loc.path.split('.').length) * 16}px` }}
+                style={{ paddingLeft: `${((loc.path?.split('.').length ?? 1)) * 16}px` }}
               >
                 <MapPin className="w-4 h-4 text-kraft-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">

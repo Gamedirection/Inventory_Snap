@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import {
-  Edit3, QrCode, MapPin, CheckCircle2, Package,
+  QrCode, MapPin, CheckCircle2, Package,
   DollarSign, Calendar, Hash, Tag, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
@@ -10,13 +10,13 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { MovementTimeline } from '@/components/inventory/MovementTimeline'
-import { useItem, useUpdateItem, useItemMovements } from '@/api/hooks/useItems'
+import { useItem, useItemMovements } from '@/api/hooks/useItems'
 import { MINIO_PUBLIC_URL } from '@/lib/constants'
-import { formatDate, formatCurrency, cn } from '@/lib/utils'
-import type { ItemCondition } from '@/lib/types'
+import { formatDate, cn } from '@/lib/utils'
 
-const conditionVariant: Record<ItemCondition, 'sage' | 'kraft' | 'rust'> = {
-  excellent: 'sage', good: 'sage', fair: 'kraft', poor: 'rust', damaged: 'rust',
+const conditionVariant: Record<string, 'sage' | 'kraft' | 'rust'> = {
+  excellent: 'sage', good: 'sage', new: 'sage', fair: 'kraft',
+  poor: 'rust', damaged: 'rust', unknown: 'kraft',
 }
 
 function InfoRow({ label, value, icon: Icon }: {
@@ -115,6 +115,11 @@ export function ItemDetailPage() {
         : `${MINIO_PUBLIC_URL}${item.primary_photo_url}`]
     : []
 
+  const serialDisplay = item.serial_numbers?.length ? item.serial_numbers.join(', ') : null
+  const priceDisplay = item.purchase_price_cents != null
+    ? `$${(item.purchase_price_cents / 100).toFixed(2)} ${item.currency_code}`
+    : null
+
   return (
     <AppShell
       showBack
@@ -151,11 +156,7 @@ export function ItemDetailPage() {
           </div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {item.category && <span className="tag">{item.category}</span>}
-            {item.subcategory && <span className="tag">{item.subcategory}</span>}
-            <Badge variant={conditionVariant[item.condition]}>{item.condition}</Badge>
-            {item.status !== 'active' && (
-              <Badge variant="rust">{item.status}</Badge>
-            )}
+            <Badge variant={conditionVariant[item.condition] ?? 'kraft'}>{item.condition}</Badge>
           </div>
           {item.description && (
             <p className="text-sm text-kraft-500 mt-2">{item.description}</p>
@@ -165,26 +166,29 @@ export function ItemDetailPage() {
         {/* Identity section */}
         <div className="card">
           <p className="section-title">Identity</p>
-          <InfoRow label="Brand"         value={item.brand}         icon={Tag} />
-          <InfoRow label="Model"         value={item.model}         icon={Package} />
-          <InfoRow label="Serial number" value={item.serial_number} icon={Hash} />
-          <InfoRow label="Asset tag"     value={item.asset_tag}     icon={Hash} />
-          <InfoRow label="Quantity"      value={item.quantity > 1 ? `${item.quantity} ${item.unit ?? 'units'}` : null} icon={Package} />
+          <InfoRow label="Brand"         value={item.brand}     icon={Tag} />
+          <InfoRow label="Model"         value={item.model}     icon={Package} />
+          <InfoRow label="Serial number" value={serialDisplay}  icon={Hash} />
+          <InfoRow
+            label="Quantity"
+            value={item.quantity > 1 ? `${item.quantity}` : null}
+            icon={Package}
+          />
         </div>
 
         {/* Location */}
-        {item.location && (
+        {item.location_path && (
           <div className="card">
             <p className="section-title">Location</p>
             <div className="flex items-center gap-2 py-1">
               <MapPin className="w-4 h-4 text-kraft-400" />
-              <span className="text-sm text-kraft-700">{item.location.path || item.location.name}</span>
+              <span className="text-sm text-kraft-700">{item.location_path}</span>
             </div>
           </div>
         )}
 
         {/* Purchase info */}
-        {(item.purchase_date || item.purchase_price) && (
+        {(item.purchase_date || item.purchase_price_cents) && (
           <div className="card">
             <p className="section-title">Purchase</p>
             <InfoRow
@@ -194,11 +198,21 @@ export function ItemDetailPage() {
             />
             <InfoRow
               label="Purchase price"
-              value={item.purchase_price != null
-                ? formatCurrency(item.purchase_price, item.currency ?? 'USD')
-                : null}
+              value={priceDisplay}
               icon={DollarSign}
             />
+          </div>
+        )}
+
+        {/* Tags */}
+        {item.custom_tags && item.custom_tags.length > 0 && (
+          <div className="card">
+            <p className="section-title">Tags</p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {item.custom_tags.map((tag) => (
+                <span key={tag} className="tag">{tag}</span>
+              ))}
+            </div>
           </div>
         )}
 
@@ -257,9 +271,6 @@ export function ItemDetailPage() {
           </div>
           <div className="text-center">
             <p className="text-sm font-semibold text-kraft-700">{item.name}</p>
-            {item.asset_tag && (
-              <p className="text-xs text-kraft-400 mt-0.5">#{item.asset_tag}</p>
-            )}
           </div>
         </div>
       </Modal>

@@ -24,7 +24,7 @@ export function QRLabel({ item, siteId, open, onClose }: QRLabelProps) {
     win.document.write(`
       <html>
         <head>
-          <title>Label — ${item.object_name}</title>
+          <title>Label — ${item.name}</title>
           <style>
             body { margin: 0; padding: 16px; font-family: sans-serif; }
             .label { border: 2px solid #4a3320; border-radius: 8px; padding: 12px; max-width: 200px; }
@@ -59,7 +59,7 @@ export function QRLabel({ item, siteId, open, onClose }: QRLabelProps) {
             fgColor="#2d1f12"
           />
           <div className="text-center">
-            <p className="name text-xs font-bold text-kraft-800 leading-tight">{item.object_name}</p>
+            <p className="name text-xs font-bold text-kraft-800 leading-tight">{item.name}</p>
             {item.category && (
               <p className="meta text-xs text-kraft-500 mt-0.5">{item.category}</p>
             )}
