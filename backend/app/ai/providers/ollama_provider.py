@@ -119,19 +119,28 @@ class OllamaProvider(BaseAIProvider):
             "options": {"temperature": 0.1},
         }
 
+        timeout = httpx.Timeout(connect=10.0, read=settings.ollama_timeout, write=30.0, pool=5.0)
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(f"{self.base_url}/api/generate", json=payload)
                 resp.raise_for_status()
                 data = resp.json()
                 raw_text = data.get("response", "")
         except Exception as exc:
-            logger.error("OllamaProvider: request failed: %s", exc)
+            logger.error(
+                "OllamaProvider: request failed (%s): %s",
+                type(exc).__name__,
+                exc or "(no message)",
+            )
+            raise  # let the pipeline/task handle retries
+
+        if not raw_text:
+            logger.warning("OllamaProvider: empty response from model")
             return []
 
         raw_objects = _extract_json_array(raw_text)
         if not raw_objects:
-            logger.warning("OllamaProvider: no objects parsed from response")
+            logger.warning("OllamaProvider: no objects parsed — raw response: %.500s", raw_text)
             return []
 
         return _parse_objects(raw_objects[: settings.ai_max_objects_per_photo])

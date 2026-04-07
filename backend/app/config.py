@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     # Ollama
     ollama_base_url: str = "http://ollama:11434"
     ollama_vision_model: str = "llava:13b"
+    ollama_timeout: int = 600  # seconds — cold model load + CPU inference can be slow
 
     # OpenAI
     openai_api_key: str = ""

@@ -72,7 +72,12 @@ def process_photo(self: Task, photo_id: str) -> None:
 
             proposals = run_pipeline(image_bytes, location_hint)
         except Exception as exc:
-            logger.error("process_photo: AI pipeline failed for photo %s: %s", photo_id, exc)
+            logger.error(
+                "process_photo: AI pipeline failed for photo %s (%s): %s",
+                photo_id,
+                type(exc).__name__,
+                exc or "(no message)",
+            )
             photo.ai_status = "failed"
             session.add(photo)
             session.commit()
