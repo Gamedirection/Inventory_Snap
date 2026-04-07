@@ -1,7 +1,14 @@
 from celery import Celery
 from app.config import settings
 
-celery_app = Celery("inventory_snap")
+celery_app = Celery(
+    "inventory_snap",
+    include=[
+        "app.workers.tasks.ai_processing",
+        "app.workers.tasks.export_generation",
+        "app.workers.tasks.thumbnail",
+    ],
+)
 celery_app.config_from_object({
     "broker_url": settings.celery_broker_url,
     "result_backend": settings.celery_result_backend,

@@ -89,7 +89,16 @@ class OllamaProvider(BaseAIProvider):
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(f"{self.base_url}/api/tags")
-                return resp.status_code == 200
+                if resp.status_code != 200:
+                    return False
+                data = resp.json()
+                model_names = [m.get("name", "") for m in data.get("models", [])]
+                # Accept if exact match or base name matches (e.g. "llava:13b" or "llava")
+                base = self.model.split(":")[0]
+                return any(
+                    m == self.model or m.startswith(base + ":") or m == base
+                    for m in model_names
+                )
         except Exception:
             return False
 
@@ -100,7 +109,7 @@ class OllamaProvider(BaseAIProvider):
     ) -> list[DetectedObject]:
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
         loc_line = f"Location context: {location_context}" if location_context else ""
-        prompt = DETECTION_PROMPT.format(location_context=loc_line)
+        prompt = DETECTION_PROMPT.replace("{location_context}", loc_line)
 
         payload = {
             "model": self.model,
