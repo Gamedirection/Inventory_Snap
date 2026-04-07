@@ -54,8 +54,11 @@ export interface LocationOut {
   children?: LocationOut[]
 }
 
-// Alias for backwards compat with components that import Location
+// Aliases for backwards compat
 export type Location = LocationOut
+export type Item = ItemOut
+export type Site = SiteOut
+export type Member = SiteMemberOut
 
 // ── Items ─────────────────────────────────────────────────────────────────────
 export type ItemCondition = 'excellent' | 'good' | 'fair' | 'poor' | 'damaged' | 'new' | 'unknown'
