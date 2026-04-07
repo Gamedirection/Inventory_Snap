@@ -7,12 +7,7 @@ export function useLogin() {
   const { setTokens, setUser } = useAuthStore()
   return useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      const form = new URLSearchParams()
-      form.set('username', email)
-      form.set('password', password)
-      const { data } = await apiClient.post<TokenResponse>('/api/v1/auth/login', form, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      })
+      const { data } = await apiClient.post<TokenResponse>('/api/v1/auth/login', { email, password })
       return data
     },
     onSuccess: async (tokens) => {
