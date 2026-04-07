@@ -9,6 +9,8 @@ class PhotoOut(BaseModel):
     id: str
     site_id: str
     location_id: str | None
+    # Both names: original_url (internal) and url (frontend-friendly alias)
+    url: str | None = None
     original_url: str | None = None
     thumbnail_url: str | None = None
     captured_at: datetime | None

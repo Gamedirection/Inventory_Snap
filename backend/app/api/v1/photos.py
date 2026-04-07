@@ -26,7 +26,9 @@ _ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/t
 def _enrich_photo(photo: Photo) -> PhotoOut:
     out = PhotoOut.model_validate(photo)
     if photo.original_object_key:
-        out.original_url = get_presigned_url(settings.minio_bucket_photos, photo.original_object_key)
+        presigned = get_presigned_url(settings.minio_bucket_photos, photo.original_object_key)
+        out.url = presigned
+        out.original_url = presigned
     if photo.thumbnail_object_key:
         out.thumbnail_url = get_presigned_url(settings.minio_bucket_thumbnails, photo.thumbnail_object_key)
     return out
@@ -64,6 +66,7 @@ async def _upload_single(
     return photo
 
 
+@router.post("", response_model=PhotoUploadResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/upload", response_model=PhotoUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_photo(
     site_id: str,
