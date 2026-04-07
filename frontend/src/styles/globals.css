@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-kraft-50 text-kraft-700 font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Safe area insets for mobile (notch, home bar) */
+  .safe-top    { padding-top: env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-left   { padding-left: env(safe-area-inset-left); }
+  .safe-right  { padding-right: env(safe-area-inset-right); }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-kraft-300 rounded-full;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-kraft-100 border border-kraft-200 rounded-xl p-4 shadow-sm;
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer hover:border-kraft-300 hover:shadow-md
+           active:scale-[0.98] transition-all duration-150;
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium
+           bg-kraft-200 text-kraft-600 border border-kraft-300;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-xl bg-kraft-700 text-kraft-50 font-medium
+           hover:bg-kraft-800 active:scale-95 transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .btn-sage {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-xl bg-accent-sage text-white font-medium
+           hover:opacity-90 active:scale-95 transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .btn-rust {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-xl bg-accent-rust text-white font-medium
+           hover:opacity-90 active:scale-95 transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-xl text-kraft-600 hover:bg-kraft-200
+           active:scale-95 transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-xl border border-kraft-300 text-kraft-600
+           hover:bg-kraft-100 active:scale-95 transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 rounded-xl border border-kraft-200 bg-white
+           text-kraft-700 placeholder-kraft-400 focus:outline-none
+           focus:ring-2 focus:ring-kraft-400/50 focus:border-kraft-400
+           transition-colors duration-150;
+  }
+
+  .label {
+    @apply text-sm font-medium text-kraft-600 mb-1 block;
+  }
+
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-wider text-kraft-400 mb-2;
+  }
+}

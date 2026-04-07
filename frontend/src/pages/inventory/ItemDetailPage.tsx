@@ -1,0 +1,268 @@
+import React, { useState } from 'react'
+import { useParams } from '@tanstack/react-router'
+import {
+  Edit3, QrCode, MapPin, CheckCircle2, Package,
+  DollarSign, Calendar, Hash, Tag, ChevronLeft, ChevronRight
+} from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
+import { AppShell } from '@/components/layout/AppShell'
+import { Badge } from '@/components/ui/Badge'
+import { Modal } from '@/components/ui/Modal'
+import { Spinner } from '@/components/ui/Spinner'
+import { MovementTimeline } from '@/components/inventory/MovementTimeline'
+import { useItem, useUpdateItem, useItemMovements } from '@/api/hooks/useItems'
+import { MINIO_PUBLIC_URL } from '@/lib/constants'
+import { formatDate, formatCurrency, cn } from '@/lib/utils'
+import type { ItemCondition } from '@/lib/types'
+
+const conditionVariant: Record<ItemCondition, 'sage' | 'kraft' | 'rust'> = {
+  excellent: 'sage', good: 'sage', fair: 'kraft', poor: 'rust', damaged: 'rust',
+}
+
+function InfoRow({ label, value, icon: Icon }: {
+  label: string
+  value: React.ReactNode
+  icon?: React.ElementType
+}) {
+  if (!value) return null
+  return (
+    <div className="flex items-start gap-3 py-2.5 border-b border-kraft-200 last:border-0">
+      {Icon && <Icon className="w-4 h-4 text-kraft-400 mt-0.5 flex-shrink-0" />}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-kraft-400 leading-none mb-0.5">{label}</p>
+        <p className="text-sm text-kraft-700 font-medium">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function PhotoGallery({ urls }: { urls: string[] }) {
+  const [idx, setIdx] = useState(0)
+  if (urls.length === 0) return null
+
+  return (
+    <div className="relative aspect-video bg-kraft-800 rounded-xl overflow-hidden">
+      <img
+        src={urls[idx]}
+        alt={`Photo ${idx + 1}`}
+        className="w-full h-full object-contain"
+      />
+      {urls.length > 1 && (
+        <>
+          <button
+            onClick={() => setIdx((i) => (i - 1 + urls.length) % urls.length)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full
+                       bg-kraft-900/60 text-white flex items-center justify-center"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIdx((i) => (i + 1) % urls.length)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full
+                       bg-kraft-900/60 text-white flex items-center justify-center"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {urls.map((_, i) => (
+              <div
+                key={i}
+                onClick={() => setIdx(i)}
+                className={cn(
+                  'w-1.5 h-1.5 rounded-full cursor-pointer transition-colors',
+                  i === idx ? 'bg-white' : 'bg-white/40'
+                )}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+export function ItemDetailPage() {
+  const { siteId, itemId } = useParams({ strict: false }) as { siteId?: string; itemId?: string }
+  const [qrOpen, setQrOpen] = useState(false)
+
+  const { data: item, isLoading } = useItem(siteId ?? null, itemId ?? null)
+  const { data: movements = [] } = useItemMovements(siteId ?? null, itemId ?? null)
+
+  if (isLoading) {
+    return (
+      <AppShell showBack>
+        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+      </AppShell>
+    )
+  }
+
+  if (!item) {
+    return (
+      <AppShell showBack headerTitle="Item not found">
+        <div className="flex flex-col items-center py-16 text-center px-4">
+          <Package className="w-12 h-12 text-kraft-300 mb-4" />
+          <p className="text-kraft-500">This item doesn't exist or was deleted.</p>
+        </div>
+      </AppShell>
+    )
+  }
+
+  const isVerified = (item.verification_count ?? 0) >= 2
+
+  const photoUrls: string[] = item.primary_photo_url
+    ? [item.primary_photo_url.startsWith('http')
+        ? item.primary_photo_url
+        : `${MINIO_PUBLIC_URL}${item.primary_photo_url}`]
+    : []
+
+  return (
+    <AppShell
+      showBack
+      headerTitle={item.name}
+      headerAction={
+        <button
+          onClick={() => setQrOpen(true)}
+          className="p-2 rounded-xl text-kraft-500 hover:text-kraft-700 hover:bg-kraft-200 transition-colors"
+          aria-label="QR code"
+        >
+          <QrCode className="w-5 h-5" />
+        </button>
+      }
+    >
+      <div className="px-4 pt-4 pb-8 space-y-5 max-w-lg mx-auto">
+
+        {/* Photo gallery */}
+        {photoUrls.length > 0 ? (
+          <PhotoGallery urls={photoUrls} />
+        ) : (
+          <div className="aspect-video bg-kraft-100 border border-kraft-200 rounded-xl
+                          flex items-center justify-center">
+            <Package className="w-12 h-12 text-kraft-300" />
+          </div>
+        )}
+
+        {/* Name + badges */}
+        <div>
+          <div className="flex items-start justify-between gap-2">
+            <h1 className="text-xl font-bold text-kraft-800 leading-tight">{item.name}</h1>
+            {isVerified && (
+              <CheckCircle2 className="w-6 h-6 text-accent-sage flex-shrink-0 mt-0.5" />
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {item.category && <span className="tag">{item.category}</span>}
+            {item.subcategory && <span className="tag">{item.subcategory}</span>}
+            <Badge variant={conditionVariant[item.condition]}>{item.condition}</Badge>
+            {item.status !== 'active' && (
+              <Badge variant="rust">{item.status}</Badge>
+            )}
+          </div>
+          {item.description && (
+            <p className="text-sm text-kraft-500 mt-2">{item.description}</p>
+          )}
+        </div>
+
+        {/* Identity section */}
+        <div className="card">
+          <p className="section-title">Identity</p>
+          <InfoRow label="Brand"         value={item.brand}         icon={Tag} />
+          <InfoRow label="Model"         value={item.model}         icon={Package} />
+          <InfoRow label="Serial number" value={item.serial_number} icon={Hash} />
+          <InfoRow label="Asset tag"     value={item.asset_tag}     icon={Hash} />
+          <InfoRow label="Quantity"      value={item.quantity > 1 ? `${item.quantity} ${item.unit ?? 'units'}` : null} icon={Package} />
+        </div>
+
+        {/* Location */}
+        {item.location && (
+          <div className="card">
+            <p className="section-title">Location</p>
+            <div className="flex items-center gap-2 py-1">
+              <MapPin className="w-4 h-4 text-kraft-400" />
+              <span className="text-sm text-kraft-700">{item.location.path || item.location.name}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Purchase info */}
+        {(item.purchase_date || item.purchase_price) && (
+          <div className="card">
+            <p className="section-title">Purchase</p>
+            <InfoRow
+              label="Purchase date"
+              value={item.purchase_date ? formatDate(item.purchase_date) : null}
+              icon={Calendar}
+            />
+            <InfoRow
+              label="Purchase price"
+              value={item.purchase_price != null
+                ? formatCurrency(item.purchase_price, item.currency ?? 'USD')
+                : null}
+              icon={DollarSign}
+            />
+          </div>
+        )}
+
+        {/* Notes */}
+        {item.notes && (
+          <div className="card">
+            <p className="section-title">Notes</p>
+            <p className="text-sm text-kraft-600 whitespace-pre-wrap">{item.notes}</p>
+          </div>
+        )}
+
+        {/* Movement history */}
+        {movements.length > 0 && (
+          <div className="card">
+            <p className="section-title">Movement history</p>
+            <MovementTimeline movements={movements} />
+          </div>
+        )}
+
+        {/* Verification status */}
+        <div className="card">
+          <p className="section-title">Verification</p>
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              'w-8 h-8 rounded-full flex items-center justify-center',
+              isVerified ? 'bg-accent-sage/15' : 'bg-kraft-200'
+            )}>
+              <CheckCircle2 className={cn(
+                'w-4 h-4',
+                isVerified ? 'text-accent-sage' : 'text-kraft-400'
+              )} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-kraft-700">
+                {isVerified ? 'Verified' : 'Unverified'}
+              </p>
+              <p className="text-xs text-kraft-400">
+                {item.verification_count} verification{item.verification_count !== 1 ? 's' : ''}
+                {!isVerified && ' · needs 2 to verify'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* QR Modal */}
+      <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="Item QR Code" size="sm">
+        <div className="flex flex-col items-center gap-4 px-5 pb-6">
+          <div className="p-4 bg-white rounded-xl border border-kraft-200">
+            <QRCodeSVG
+              value={`inventorysnap://item/${siteId}/${itemId}`}
+              size={200}
+              level="M"
+              includeMargin={false}
+            />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-kraft-700">{item.name}</p>
+            {item.asset_tag && (
+              <p className="text-xs text-kraft-400 mt-0.5">#{item.asset_tag}</p>
+            )}
+          </div>
+        </div>
+      </Modal>
+    </AppShell>
+  )
+}
