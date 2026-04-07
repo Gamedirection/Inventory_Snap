@@ -6,16 +6,32 @@ from botocore.client import Config
 from app.config import settings
 
 
-def get_minio_client():
-    """Return a configured boto3 S3 client pointed at MinIO."""
+def _build_s3_client(endpoint_url: str):
     return boto3.client(
         "s3",
-        endpoint_url=f"{'https' if settings.minio_secure else 'http'}://{settings.minio_endpoint}",
+        endpoint_url=endpoint_url,
         aws_access_key_id=settings.minio_access_key,
         aws_secret_access_key=settings.minio_secret_key,
         config=Config(signature_version="s3v4"),
         region_name="us-east-1",
     )
+
+
+def get_minio_client():
+    """Return a configured boto3 S3 client pointed at the internal MinIO service."""
+    return _build_s3_client(
+        f"{'https' if settings.minio_secure else 'http'}://{settings.minio_endpoint}"
+    )
+
+
+def get_public_minio_client():
+    """Return a boto3 S3 client pointed at the browser-visible MinIO endpoint."""
+    public_url = settings.public_minio_url.strip()
+    if not public_url:
+        return get_minio_client()
+
+    endpoint_url = public_url if "://" in public_url else f"http://{public_url}"
+    return _build_s3_client(endpoint_url)
 
 
 def upload_to_minio(bucket: str, key: str, data: bytes, content_type: str = "application/octet-stream") -> None:
@@ -32,7 +48,7 @@ def upload_to_minio(bucket: str, key: str, data: bytes, content_type: str = "app
 
 def get_presigned_url(bucket: str, key: str, expires: int = 3600) -> str:
     """Generate a presigned GET URL for a MinIO object."""
-    client = get_minio_client()
+    client = get_public_minio_client()
     return client.generate_presigned_url(
         "get_object",
         Params={"Bucket": bucket, "Key": key},

@@ -6,6 +6,21 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class ItemFloorPlanPinInput(BaseModel):
+    id: str | None = None
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+
+
+class ItemFloorPlanPinOut(BaseModel):
+    id: str
+    pin_index: int
+    x: float
+    y: float
+
+    model_config = {"from_attributes": True}
+
+
 class ItemCreate(BaseModel):
     name: str = Field(max_length=255)
     description: str | None = None
@@ -31,6 +46,9 @@ class ItemCreate(BaseModel):
     custom_tags: list[str] | None = None
     gps_latitude: float | None = None
     gps_longitude: float | None = None
+    floor_plan_x: float | None = None
+    floor_plan_y: float | None = None
+    pins: list[ItemFloorPlanPinInput] | None = None
 
 
 class ItemUpdate(BaseModel):
@@ -56,6 +74,11 @@ class ItemUpdate(BaseModel):
     warranty_notes: str | None = None
     notes: str | None = None
     custom_tags: list[str] | None = None
+    gps_latitude: float | None = None
+    gps_longitude: float | None = None
+    floor_plan_x: float | None = None
+    floor_plan_y: float | None = None
+    pins: list[ItemFloorPlanPinInput] | None = None
 
 
 class ItemOut(BaseModel):
@@ -87,6 +110,8 @@ class ItemOut(BaseModel):
     primary_photo_id: str | None
     gps_latitude: float | None
     gps_longitude: float | None
+    floor_plan_x: float | None
+    floor_plan_y: float | None
     confidence_score: float | None
     verification_count: int
     is_verified: bool
@@ -99,6 +124,7 @@ class ItemOut(BaseModel):
     # Computed (populated by _enrich_item)
     primary_photo_url: str | None = None
     location_path: str | None = None
+    pins: list[ItemFloorPlanPinOut] = []
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 

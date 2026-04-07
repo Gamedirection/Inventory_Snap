@@ -1,17 +1,22 @@
 import { useParams, useNavigate } from '@tanstack/react-router'
 import {
-  Building2, Package, Users, Map, Camera, ClipboardCheck, ChevronRight
+  Building2, Package, Users, Map, Camera, ClipboardCheck, ChevronRight, Trash2
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { AppShell } from '@/components/layout/AppShell'
+import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import { useSite } from '@/api/hooks/useSites'
+import { useDeleteSite, useSite } from '@/api/hooks/useSites'
 import { useReviewQueueCount } from '@/api/hooks/useReview'
+import { useSiteStore } from '@/store/siteStore'
 
 export function SiteDetailPage() {
   const { siteId } = useParams({ strict: false }) as { siteId?: string }
   const navigate = useNavigate()
   const { data: site, isLoading } = useSite(siteId ?? null)
   const { data: reviewCount } = useReviewQueueCount(siteId ?? null)
+  const deleteSite = useDeleteSite(siteId ?? '')
+  const { clearActiveSite } = useSiteStore()
 
   if (isLoading) {
     return (
@@ -22,6 +27,22 @@ export function SiteDetailPage() {
   }
 
   if (!site) return null
+
+  const canDeleteSite = site.role === 'owner'
+
+  const handleDeleteSite = async () => {
+    if (!siteId || !canDeleteSite) return
+    const confirmed = window.confirm(`Delete site "${site.name}"? This cannot be undone.`)
+    if (!confirmed) return
+    try {
+      await deleteSite.mutateAsync()
+      clearActiveSite()
+      toast.success('Site deleted')
+      navigate({ to: '/sites' })
+    } catch {
+      toast.error('Failed to delete site')
+    }
+  }
 
   const actions = [
     {
@@ -77,6 +98,19 @@ export function SiteDetailPage() {
           </div>
           {site.description && (
             <p className="mt-3 text-sm text-kraft-500">{site.description}</p>
+          )}
+          {canDeleteSite && (
+            <div className="mt-4 pt-4 border-t border-kraft-200">
+              <Button
+                type="button"
+                variant="rust"
+                leftIcon={<Trash2 className="w-4 h-4" />}
+                onClick={handleDeleteSite}
+                loading={deleteSite.isPending}
+              >
+                Delete Site
+              </Button>
+            </div>
           )}
         </div>
 

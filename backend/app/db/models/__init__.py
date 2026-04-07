@@ -1,6 +1,6 @@
 from app.db.models.audit import AuditLog
 from app.db.models.export import ExportJob
-from app.db.models.item import Item, ItemDocument, ItemPhoto
+from app.db.models.item import Item, ItemDocument, ItemFloorPlanPin, ItemPhoto
 from app.db.models.location import FloorMap, Location
 from app.db.models.movement import Movement
 from app.db.models.photo import Photo
@@ -14,6 +14,7 @@ __all__ = [
     "FloorMap",
     "Item",
     "ItemDocument",
+    "ItemFloorPlanPin",
     "ItemPhoto",
     "Location",
     "Movement",

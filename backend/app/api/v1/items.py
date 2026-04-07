@@ -9,7 +9,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.audit import AuditLog
-from app.db.models.item import Item, ItemPhoto
+from app.db.models.item import Item, ItemFloorPlanPin, ItemPhoto
 from app.db.models.location import Location
 from app.db.models.movement import Movement
 from app.db.models.user import User
@@ -17,6 +17,7 @@ from app.deps import CurrentUser, DB, site_role_checker
 from app.schemas.item import (
     BulkOperation,
     ItemCreate,
+    ItemFloorPlanPinInput,
     ItemMoveRequest,
     ItemOut,
     ItemSearchParams,
@@ -63,7 +64,60 @@ async def _enrich_item(item: Item, db: AsyncSession) -> ItemOut:
             current_id = loc.parent_id
         out.location_path = " > ".join(path_parts)
 
+    pins_result = await db.execute(
+        select(ItemFloorPlanPin)
+        .where(ItemFloorPlanPin.item_id == item.id)
+        .order_by(ItemFloorPlanPin.pin_index.asc())
+    )
+    out.pins = [pin for pin in pins_result.scalars().all()]
+
     return out
+
+
+def _sync_legacy_floor_plan_fields(item: Item, pins: list[ItemFloorPlanPin]) -> None:
+    if pins:
+        item.floor_plan_x = pins[0].x
+        item.floor_plan_y = pins[0].y
+    else:
+        item.floor_plan_x = None
+        item.floor_plan_y = None
+
+
+async def _apply_item_pins(
+    db: AsyncSession,
+    item: Item,
+    pins: list[ItemFloorPlanPinInput],
+) -> None:
+    if len(pins) > item.quantity:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot place {len(pins)} pins for quantity {item.quantity}",
+        )
+
+    existing_result = await db.execute(
+        select(ItemFloorPlanPin).where(ItemFloorPlanPin.item_id == item.id)
+    )
+    existing_pins = {pin.id: pin for pin in existing_result.scalars().all()}
+    retained_ids: set[str] = set()
+    ordered_pins: list[ItemFloorPlanPin] = []
+
+    for index, pin_input in enumerate(pins):
+        pin = existing_pins.get(pin_input.id) if pin_input.id else None
+        if pin is None:
+            pin = ItemFloorPlanPin(item_id=item.id, pin_index=index, x=pin_input.x, y=pin_input.y)
+            db.add(pin)
+        else:
+            pin.pin_index = index
+            pin.x = pin_input.x
+            pin.y = pin_input.y
+            retained_ids.add(pin.id)
+        ordered_pins.append(pin)
+
+    for pin_id, pin in existing_pins.items():
+        if pin_id not in retained_ids:
+            await db.delete(pin)
+
+    _sync_legacy_floor_plan_fields(item, ordered_pins)
 
 
 def _build_fts_query(params: ItemSearchParams, site_id: str):
@@ -196,7 +250,7 @@ async def create_item(
             raise HTTPException(status_code=404, detail="Location not found")
 
     # Map frontend field names to DB column names
-    item_data = data.model_dump(exclude={"name", "description"})
+    item_data = data.model_dump(exclude={"name", "description", "pins"})
     item = Item(
         site_id=site_id,
         created_by=current_user.id,
@@ -205,6 +259,9 @@ async def create_item(
         **item_data,
     )
     db.add(item)
+    await db.flush()
+    if data.pins is not None:
+        await _apply_item_pins(db, item, data.pins)
     await db.commit()
     await db.refresh(item)
     return await _enrich_item(item, db)
@@ -250,7 +307,7 @@ async def update_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    update_data = data.model_dump(exclude_unset=True, exclude={"name", "description"})
+    update_data = data.model_dump(exclude_unset=True, exclude={"name", "description", "pins"})
     for field, value in update_data.items():
         setattr(item, field, value)
 
@@ -259,6 +316,19 @@ async def update_item(
         item.object_name = data.name
     if data.description is not None:
         item.short_description = data.description
+    if data.pins is not None:
+        await _apply_item_pins(db, item, data.pins)
+    elif data.quantity is not None:
+        existing_pins_result = await db.execute(
+            select(ItemFloorPlanPin)
+            .where(ItemFloorPlanPin.item_id == item.id)
+            .order_by(ItemFloorPlanPin.pin_index.asc())
+        )
+        existing_pins = existing_pins_result.scalars().all()
+        if len(existing_pins) > item.quantity:
+            for pin in existing_pins[item.quantity:]:
+                await db.delete(pin)
+            _sync_legacy_floor_plan_fields(item, existing_pins[: item.quantity])
 
     audit = AuditLog(
         site_id=site_id,

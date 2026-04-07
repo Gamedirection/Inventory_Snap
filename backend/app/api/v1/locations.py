@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import mimetypes
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +18,7 @@ from app.schemas.location import (
     LocationOut,
     LocationUpdate,
 )
-from app.services.photo_service import get_minio_client, get_presigned_url, upload_to_minio
+from app.services.photo_service import download_from_minio, get_minio_client, upload_to_minio
 from app.config import settings
 
 router = APIRouter(prefix="/sites/{site_id}/locations", tags=["locations"])
@@ -251,11 +252,33 @@ async def get_floor_map(
 
     image_url = None
     if floor_map.image_object_key:
-        image_url = get_presigned_url(settings.minio_bucket_photos, floor_map.image_object_key)
+        image_url = f"/api/v1/sites/{site_id}/locations/{location_id}/map/image"
 
     out = FloorMapOut.model_validate(floor_map)
     out.image_url = image_url
     return out
+
+
+@router.get("/{location_id}/map/image")
+async def get_floor_map_image(
+    site_id: str,
+    location_id: str,
+    db: DB,
+    _auth: RequireViewer,
+):
+    result = await db.execute(
+        select(FloorMap).where(
+            FloorMap.location_id == location_id,
+            FloorMap.site_id == site_id,
+        )
+    )
+    floor_map = result.scalar_one_or_none()
+    if not floor_map or not floor_map.image_object_key:
+        raise HTTPException(status_code=404, detail="Floor map image not found")
+
+    image_bytes = download_from_minio(settings.minio_bucket_photos, floor_map.image_object_key)
+    media_type = mimetypes.guess_type(floor_map.image_object_key)[0] or "application/octet-stream"
+    return Response(content=image_bytes, media_type=media_type)
 
 
 @router.put("/{location_id}/map/image", response_model=FloorMapOut)
@@ -306,7 +329,7 @@ async def upload_floor_plan_image(
     await db.commit()
     await db.refresh(floor_map)
 
-    image_url = get_presigned_url(settings.minio_bucket_photos, object_key)
+    image_url = f"/api/v1/sites/{site_id}/locations/{location_id}/map/image"
     out = FloorMapOut.model_validate(floor_map)
     out.image_url = image_url
     return out
@@ -362,7 +385,7 @@ async def update_floor_map_vector(
 
     image_url = None
     if floor_map.image_object_key:
-        image_url = get_presigned_url(settings.minio_bucket_photos, floor_map.image_object_key)
+        image_url = f"/api/v1/sites/{site_id}/locations/{location_id}/map/image"
 
     out = FloorMapOut.model_validate(floor_map)
     out.image_url = image_url

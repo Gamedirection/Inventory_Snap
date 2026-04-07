@@ -56,6 +56,20 @@ export function useUpdateSite(siteId: string) {
   })
 }
 
+export function useDeleteSite(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient.delete(`/api/v1/sites/${siteId}`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: siteKeys.all })
+      qc.invalidateQueries({ queryKey: siteKeys.detail(siteId) })
+      qc.invalidateQueries({ queryKey: siteKeys.members(siteId) })
+    },
+  })
+}
+
 export function useSiteMembers(siteId: string | null) {
   return useQuery({
     queryKey: siteKeys.members(siteId ?? ''),

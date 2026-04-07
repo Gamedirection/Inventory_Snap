@@ -1,16 +1,18 @@
 import React, { useState } from 'react'
-import { useParams } from '@tanstack/react-router'
+import { useNavigate, useParams } from '@tanstack/react-router'
 import {
   QrCode, MapPin, CheckCircle2, Package,
-  DollarSign, Calendar, Hash, Tag, ChevronLeft, ChevronRight
+  DollarSign, Calendar, Hash, Tag, ChevronLeft, ChevronRight, Trash2
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { QRCodeSVG } from 'qrcode.react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { MovementTimeline } from '@/components/inventory/MovementTimeline'
-import { useItem, useItemMovements } from '@/api/hooks/useItems'
+import { useDeleteItem, useItem, useItemMovements } from '@/api/hooks/useItems'
 import { MINIO_PUBLIC_URL } from '@/lib/constants'
 import { formatDate, cn } from '@/lib/utils'
 
@@ -83,10 +85,12 @@ function PhotoGallery({ urls }: { urls: string[] }) {
 
 export function ItemDetailPage() {
   const { siteId, itemId } = useParams({ strict: false }) as { siteId?: string; itemId?: string }
+  const navigate = useNavigate()
   const [qrOpen, setQrOpen] = useState(false)
 
   const { data: item, isLoading } = useItem(siteId ?? null, itemId ?? null)
   const { data: movements = [] } = useItemMovements(siteId ?? null, itemId ?? null)
+  const deleteItem = useDeleteItem(siteId ?? '', itemId ?? '')
 
   if (isLoading) {
     return (
@@ -119,6 +123,19 @@ export function ItemDetailPage() {
   const priceDisplay = item.purchase_price_cents != null
     ? `$${(item.purchase_price_cents / 100).toFixed(2)} ${item.currency_code}`
     : null
+
+  const handleDeleteItem = async () => {
+    if (!siteId || !itemId) return
+    const confirmed = window.confirm(`Delete item "${item.name}"? This cannot be undone.`)
+    if (!confirmed) return
+    try {
+      await deleteItem.mutateAsync()
+      toast.success('Item deleted')
+      navigate({ to: `/sites/${siteId}/inventory` })
+    } catch {
+      toast.error('Failed to delete item')
+    }
+  }
 
   return (
     <AppShell
@@ -255,6 +272,19 @@ export function ItemDetailPage() {
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="card">
+          <p className="section-title">Danger zone</p>
+          <Button
+            type="button"
+            variant="rust"
+            leftIcon={<Trash2 className="w-4 h-4" />}
+            onClick={handleDeleteItem}
+            loading={deleteItem.isPending}
+          >
+            Delete Item
+          </Button>
         </div>
       </div>
 

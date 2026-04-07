@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { LocationOut } from '@/lib/types'
+import type { FloorMapOut, LocationOut } from '@/lib/types'
 
 export const locationKeys = {
   all: (siteId: string) => ['locations', siteId] as const,
   tree: (siteId: string) => ['locations', siteId, 'tree'] as const,
   flat: (siteId: string) => ['locations', siteId, 'flat'] as const,
+  floorMap: (siteId: string, locationId: string) => ['locations', siteId, locationId, 'floorMap'] as const,
 }
 
 function buildTree(flat: LocationOut[]): LocationOut[] {
@@ -134,6 +135,59 @@ export function useDeleteLocation(siteId: string) {
       qc.invalidateQueries({ queryKey: locationKeys.all(siteId) })
       qc.invalidateQueries({ queryKey: locationKeys.tree(siteId) })
       qc.invalidateQueries({ queryKey: locationKeys.flat(siteId) })
+    },
+  })
+}
+
+export function useFloorMap(siteId: string | null, locationId: string | null) {
+  return useQuery({
+    queryKey: locationKeys.floorMap(siteId ?? '', locationId ?? ''),
+    queryFn: async () => {
+      const { data } = await apiClient.get<FloorMapOut>(
+        `/api/v1/sites/${siteId}/locations/${locationId}/map`
+      )
+      return data
+    },
+    enabled: !!siteId && !!locationId,
+    retry: false,
+  })
+}
+
+export function useUploadFloorMapImage(siteId: string, locationId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      const { data } = await apiClient.put<FloorMapOut>(
+        `/api/v1/sites/${siteId}/locations/${locationId}/map/image`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      )
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: locationKeys.floorMap(siteId, locationId) })
+    },
+  })
+}
+
+export function useUpdateFloorMap(siteId: string, locationId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: {
+      vector_data?: FloorMapOut['vector_data']
+      width?: number
+      height?: number
+    }) => {
+      const { data } = await apiClient.put<FloorMapOut>(
+        `/api/v1/sites/${siteId}/locations/${locationId}/map/vector`,
+        payload
+      )
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: locationKeys.floorMap(siteId, locationId) })
     },
   })
 }

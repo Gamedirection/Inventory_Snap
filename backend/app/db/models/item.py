@@ -79,6 +79,8 @@ class Item(Base):
     # GPS
     gps_latitude: Mapped[float | None] = mapped_column(Double)
     gps_longitude: Mapped[float | None] = mapped_column(Double)
+    floor_plan_x: Mapped[float | None] = mapped_column(Double)
+    floor_plan_y: Mapped[float | None] = mapped_column(Double)
 
     # Verification (double-log)
     confidence_score: Mapped[float | None] = mapped_column(Double)
@@ -107,6 +109,12 @@ class Item(Base):
     )
     documents: Mapped[list["ItemDocument"]] = relationship(
         "ItemDocument", back_populates="item", cascade="all, delete-orphan"
+    )
+    floor_plan_pins: Mapped[list["ItemFloorPlanPin"]] = relationship(
+        "ItemFloorPlanPin",
+        back_populates="item",
+        cascade="all, delete-orphan",
+        order_by="ItemFloorPlanPin.pin_index",
     )
     movements: Mapped[list["Movement"]] = relationship(  # noqa: F821
         "Movement", back_populates="item", cascade="all, delete-orphan"
@@ -139,6 +147,25 @@ class ItemPhoto(Base):
 
     item: Mapped["Item"] = relationship("Item", back_populates="item_photos")
     photo: Mapped["Photo"] = relationship("Photo", back_populates="item_photos")  # noqa: F821
+
+
+class ItemFloorPlanPin(Base):
+    __tablename__ = "item_floor_plan_pins"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    item_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    pin_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    x: Mapped[float] = mapped_column(Double, nullable=False)
+    y: Mapped[float] = mapped_column(Double, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    item: Mapped["Item"] = relationship("Item", back_populates="floor_plan_pins")
 
 
 class ItemDocument(Base):

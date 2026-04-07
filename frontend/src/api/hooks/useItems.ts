@@ -71,6 +71,29 @@ export function useUpdateItem(siteId: string, itemId: string) {
   })
 }
 
+export function usePatchItem(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      itemId,
+      payload,
+    }: {
+      itemId: string
+      payload: Partial<ItemOut>
+    }) => {
+      const { data } = await apiClient.patch<ItemOut>(
+        `/api/v1/sites/${siteId}/items/${itemId}`,
+        payload
+      )
+      return data
+    },
+    onSuccess: (item) => {
+      qc.invalidateQueries({ queryKey: itemKeys.all(siteId) })
+      qc.invalidateQueries({ queryKey: itemKeys.detail(siteId, item.id) })
+    },
+  })
+}
+
 export function useMoveItem(siteId: string, itemId: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -82,6 +105,20 @@ export function useMoveItem(siteId: string, itemId: string) {
       return data
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: itemKeys.detail(siteId, itemId) })
+      qc.invalidateQueries({ queryKey: itemKeys.movements(siteId, itemId) })
+    },
+  })
+}
+
+export function useDeleteItem(siteId: string, itemId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient.delete(`/api/v1/sites/${siteId}/items/${itemId}`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: itemKeys.all(siteId) })
       qc.invalidateQueries({ queryKey: itemKeys.detail(siteId, itemId) })
       qc.invalidateQueries({ queryKey: itemKeys.movements(siteId, itemId) })
     },

@@ -54,6 +54,36 @@ export interface LocationOut {
   children?: LocationOut[]
 }
 
+export interface FloorMapOut {
+  id: string
+  location_id: string
+  site_id: string
+  image_url: string | null
+  vector_data: {
+    shapes?: Array<{
+      id: string
+      type: 'rect'
+      x: number
+      y: number
+      width: number
+      height: number
+      label: string
+      location_id?: string
+    }>
+  } | null
+  width: number | null
+  height: number | null
+  created_at: string
+  updated_at: string | null
+}
+
+export interface ItemFloorPlanPinOut {
+  id: string
+  pin_index: number
+  x: number
+  y: number
+}
+
 // Aliases for backwards compat
 export type Location = LocationOut
 export type Item = ItemOut
@@ -92,6 +122,9 @@ export interface ItemOut {
   primary_photo_id: string | null
   gps_latitude: number | null
   gps_longitude: number | null
+  floor_plan_x: number | null
+  floor_plan_y: number | null
+  pins: ItemFloorPlanPinOut[]
   confidence_score: number | null
   verification_count: number
   is_verified: boolean
@@ -194,6 +227,7 @@ export interface ItemFilters {
   location_id?: string
   condition?: string
   is_verified?: boolean
+  sort?: string
   page?: number
   size?: number
 }
