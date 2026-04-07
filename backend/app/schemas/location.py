@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class LocationCreate(BaseModel):
@@ -34,11 +35,32 @@ class LocationOut(BaseModel):
     floor_plan_y: float | None
     order_index: int
     created_at: datetime
-    # Computed
+    # Computed / manually populated — NOT loaded from ORM relationship
     item_count: int = 0
     children: list["LocationOut"] = []
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _safe_from_orm(cls, data: Any) -> Any:
+        # If this is a SQLAlchemy ORM object, extract only safe scalar attributes.
+        # Accessing the 'children' relationship outside an async context raises MissingGreenlet.
+        if hasattr(data, "__tablename__"):
+            return {
+                "id": data.id,
+                "site_id": data.site_id,
+                "parent_id": data.parent_id,
+                "name": data.name,
+                "level": data.level,
+                "description": data.description,
+                "floor_plan_x": data.floor_plan_x,
+                "floor_plan_y": data.floor_plan_y,
+                "order_index": data.order_index,
+                "created_at": data.created_at,
+                "children": [],
+            }
+        return data
 
 
 class LocationReorder(BaseModel):
