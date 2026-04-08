@@ -155,6 +155,12 @@ export interface ItemMovement {
 // ── Photos ─────────────────────────────────────────────────────────────────────
 export type PhotoAiStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
+export interface PhotoUploadResponse {
+  photo_id: string
+  ai_status: PhotoAiStatus
+  message: string
+}
+
 export interface PhotoOut {
   id: string
   site_id: string

@@ -1,11 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { PhotoOut } from '@/lib/types'
+import type { PhotoOut, PhotoUploadResponse } from '@/lib/types'
 
 export const photoKeys = {
   all: (siteId: string) => ['photos', siteId] as const,
   list: (siteId: string, filters: Record<string, string>) =>
     ['photos', siteId, 'list', filters] as const,
+  detail: (siteId: string, photoId: string) =>
+    ['photos', siteId, photoId] as const,
 }
 
 export function usePhotos(siteId: string | null, filters: Record<string, string> = {}) {
@@ -19,6 +21,29 @@ export function usePhotos(siteId: string | null, filters: Record<string, string>
       return data
     },
     enabled: !!siteId,
+  })
+}
+
+/**
+ * Poll a single photo's AI status.
+ * Automatically stops polling once ai_status is 'completed' or 'failed'.
+ */
+export function usePhotoAiStatus(siteId: string | null, photoId: string | null) {
+  return useQuery({
+    queryKey: photoKeys.detail(siteId ?? '', photoId ?? ''),
+    queryFn: async () => {
+      const { data } = await apiClient.get<PhotoOut>(
+        `/api/v1/sites/${siteId}/photos/${photoId}`
+      )
+      return data
+    },
+    enabled: !!siteId && !!photoId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.ai_status
+      if (status === 'completed' || status === 'failed') return false
+      return 3_000
+    },
+    staleTime: 0,
   })
 }
 
@@ -39,7 +64,7 @@ export function useUploadPhoto(siteId: string) {
       if (locationId) form.append('location_id', locationId)
       if (capturedAt) form.append('captured_at', capturedAt)
 
-      const { data } = await apiClient.post<PhotoOut>(
+      const { data } = await apiClient.post<PhotoUploadResponse>(
         `/api/v1/sites/${siteId}/photos`,
         form,
         { headers: { 'Content-Type': 'multipart/form-data' } }
@@ -62,7 +87,7 @@ export function useBatchUploadPhotos(siteId: string) {
           form.append('file', blob, 'photo.jpg')
           if (locationId) form.append('location_id', locationId)
           if (capturedAt) form.append('captured_at', capturedAt)
-          const { data } = await apiClient.post<PhotoOut>(
+          const { data } = await apiClient.post<PhotoUploadResponse>(
             `/api/v1/sites/${siteId}/photos`,
             form,
             { headers: { 'Content-Type': 'multipart/form-data' } }

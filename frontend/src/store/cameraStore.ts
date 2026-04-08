@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { PhotoAiStatus } from '@/lib/types'
 
 export interface CaptureQueueItem {
   tempId: string
@@ -8,6 +9,10 @@ export interface CaptureQueueItem {
   capturedAt: string
   uploadStatus: 'pending' | 'uploading' | 'uploaded' | 'failed'
   thumbnailUrl?: string
+  /** Set after successful upload — the real photo ID from the server */
+  photoId?: string
+  /** AI processing status polled from the server */
+  aiStatus?: PhotoAiStatus
 }
 
 interface CameraState {

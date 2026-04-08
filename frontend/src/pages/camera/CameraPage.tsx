@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Upload, Loader2 } from 'lucide-react'
+import { Upload, Loader2, ScanSearch } from 'lucide-react'
 import { useParams } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
 import { AppShell } from '@/components/layout/AppShell'
@@ -32,13 +32,17 @@ export function CameraPage() {
     pending.forEach(async (item) => {
       updateQueueItem(item.tempId, { uploadStatus: 'uploading' })
       try {
-        await upload.mutateAsync({
+        const result = await upload.mutateAsync({
           blob: item.blob,
           locationId: item.locationId,
           capturedAt: item.capturedAt,
         })
-        updateQueueItem(item.tempId, { uploadStatus: 'uploaded' })
-        toast.success('Photo uploaded — AI processing started')
+        updateQueueItem(item.tempId, {
+          uploadStatus: 'uploaded',
+          photoId: result.photo_id,
+          aiStatus: result.ai_status,
+        })
+        toast.success('Photo uploaded — AI scanning started')
       } catch {
         updateQueueItem(item.tempId, { uploadStatus: 'failed' })
         toast.error('Upload failed — tap to retry')
@@ -46,8 +50,11 @@ export function CameraPage() {
     })
   }, [captureQueue.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pendingCount = captureQueue.filter((i) => i.uploadStatus === 'pending').length
+  const pendingCount   = captureQueue.filter((i) => i.uploadStatus === 'pending').length
   const uploadingCount = captureQueue.filter((i) => i.uploadStatus === 'uploading').length
+  const scanningCount  = captureQueue.filter(
+    (i) => i.uploadStatus === 'uploaded' && (i.aiStatus === 'pending' || i.aiStatus === 'processing')
+  ).length
 
   return (
     <AppShell headerTitle="Camera">
@@ -68,6 +75,13 @@ export function CameraPage() {
             <div className="flex items-center gap-2 text-xs text-kraft-500">
               <Loader2 className="w-3 h-3 animate-spin" />
               Uploading {uploadingCount} photo{uploadingCount > 1 ? 's' : ''}…
+            </div>
+          )}
+
+          {scanningCount > 0 && uploadingCount === 0 && (
+            <div className="flex items-center gap-2 text-xs text-amber-600">
+              <ScanSearch className="w-3 h-3 animate-pulse" />
+              AI scanning {scanningCount} photo{scanningCount > 1 ? 's' : ''}…
             </div>
           )}
 
