@@ -1,26 +1,26 @@
 import React from 'react'
 import { animated } from '@react-spring/web'
-import { Check, X } from 'lucide-react'
+import { Check, SkipForward } from 'lucide-react'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 
 interface SwipeCardProps {
   children: React.ReactNode
-  onSwipeLeft?: () => void
-  onSwipeRight?: () => void
+  onSwipeUp?: () => void    // approve
+  onSwipeDown?: () => void  // skip / reject
   className?: string
   threshold?: number
 }
 
 export function SwipeCard({
   children,
-  onSwipeLeft,
-  onSwipeRight,
+  onSwipeUp,
+  onSwipeDown,
   className = '',
-  threshold = 120,
+  threshold = 100,
 }: SwipeCardProps) {
-  const { bind, springStyle, approveOpacity, rejectOpacity } = useSwipeGesture({
-    onSwipeLeft,
-    onSwipeRight,
+  const { bind, springStyle, approveOpacity, skipOpacity } = useSwipeGesture({
+    onSwipeUp,
+    onSwipeDown,
     threshold,
   })
 
@@ -28,34 +28,33 @@ export function SwipeCard({
     <animated.div
       {...bind()}
       style={{
-        x: springStyle.x,
-        rotate: springStyle.rotate,
+        y: springStyle.y,
         opacity: springStyle.opacity,
         touchAction: 'none',
       }}
       className={`relative select-none cursor-grab active:cursor-grabbing ${className}`}
     >
-      {/* Approve indicator (right swipe) */}
+      {/* Approve indicator — top (swipe up) */}
       <animated.div
         style={{ opacity: approveOpacity }}
         className="absolute inset-0 z-10 rounded-xl bg-accent-sage/20 border-2 border-accent-sage
-                   flex items-center justify-start pl-6 pointer-events-none"
+                   flex items-start justify-center pt-6 pointer-events-none"
       >
-        <div className="flex items-center gap-2 bg-accent-sage text-white px-3 py-2 rounded-lg">
+        <div className="flex items-center gap-2 bg-accent-sage text-white px-4 py-2 rounded-xl shadow-lg">
           <Check className="w-5 h-5" />
           <span className="font-semibold text-sm">Approve</span>
         </div>
       </animated.div>
 
-      {/* Reject indicator (left swipe) */}
+      {/* Skip indicator — bottom (swipe down) */}
       <animated.div
-        style={{ opacity: rejectOpacity }}
-        className="absolute inset-0 z-10 rounded-xl bg-accent-rust/20 border-2 border-accent-rust
-                   flex items-center justify-end pr-6 pointer-events-none"
+        style={{ opacity: skipOpacity }}
+        className="absolute inset-0 z-10 rounded-xl bg-kraft-400/20 border-2 border-kraft-400
+                   flex items-end justify-center pb-6 pointer-events-none"
       >
-        <div className="flex items-center gap-2 bg-accent-rust text-white px-3 py-2 rounded-lg">
-          <span className="font-semibold text-sm">Reject</span>
-          <X className="w-5 h-5" />
+        <div className="flex items-center gap-2 bg-kraft-600 text-white px-4 py-2 rounded-xl shadow-lg">
+          <SkipForward className="w-5 h-5" />
+          <span className="font-semibold text-sm">Skip</span>
         </div>
       </animated.div>
 

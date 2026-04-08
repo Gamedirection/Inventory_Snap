@@ -32,10 +32,14 @@ export function BoundingBoxOverlay({
     >
       {objects.map((obj, idx) => {
         const color = COLORS[idx % COLORS.length]
-        const { x, y, width, height } = obj.bbox
+        // bbox values are normalised 0-1 — convert to pixel coords
+        const x      = obj.bbox.x      * imageWidth
+        const y      = obj.bbox.y      * imageHeight
+        const width  = obj.bbox.width  * imageWidth
+        const height = obj.bbox.height * imageHeight
         const isHovered = hoveredId === obj.id
 
-        // Pixel label pin at top-left of box
+        // Label pin above box
         const labelX = Math.min(x, imageWidth - 120)
         const labelY = Math.max(y - 28, 4)
 

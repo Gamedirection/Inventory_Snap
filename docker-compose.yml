@@ -18,7 +18,10 @@ x-backend-env: &backend-env
   MINIO_BUCKET_DOCUMENTS: ${MINIO_BUCKET_DOCUMENTS:-documents}
   MINIO_BUCKET_EXPORTS: ${MINIO_BUCKET_EXPORTS:-exports}
   MINIO_BUCKET_BACKUPS: ${MINIO_BUCKET_BACKUPS:-backups}
-  PUBLIC_MINIO_URL: ${PUBLIC_MINIO_URL:-http://localhost:9000}
+  # Must match the public base URL of this server (nginx).
+  # MinIO is proxied through nginx at /photos/, /thumbnails/, etc. so presigned
+  # URL signatures are valid on the same origin as the frontend.
+  PUBLIC_MINIO_URL: ${PUBLIC_MINIO_URL:-http://localhost}
   SECRET_KEY: ${SECRET_KEY:-changeme-insecure-dev-key}
   JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
   JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-60}

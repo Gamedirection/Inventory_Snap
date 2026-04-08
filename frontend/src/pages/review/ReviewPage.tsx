@@ -34,6 +34,7 @@ export function ReviewPage() {
   }, [siteId, accessToken, qc])
 
   const pendingItems = data?.items?.filter((i) => i.pending_count > 0) ?? []
+  const totalProposals = pendingItems.reduce((acc, i) => acc + i.proposals.length, 0)
 
   return (
     <AppShell headerTitle="Review Queue">
@@ -64,10 +65,10 @@ export function ReviewPage() {
             <div className="flex items-center gap-2">
               <ClipboardCheck className="w-4 h-4 text-kraft-500" />
               <p className="text-sm font-medium text-kraft-600">
-                {pendingItems.length} photo{pendingItems.length !== 1 ? 's' : ''} to review
+                {totalProposals} detected item{totalProposals !== 1 ? 's' : ''} to review
               </p>
               <span className="ml-auto text-xs text-kraft-400">
-                Swipe to act
+                ↑ approve · ↓ skip
               </span>
             </div>
 

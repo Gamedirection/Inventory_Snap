@@ -2,59 +2,56 @@ import { useSpring } from '@react-spring/web'
 import { useDrag } from '@use-gesture/react'
 
 interface SwipeGestureOptions {
-  onSwipeLeft?: () => void
-  onSwipeRight?: () => void
+  onSwipeUp?: () => void    // approve
+  onSwipeDown?: () => void  // skip / reject
   threshold?: number
 }
 
 export function useSwipeGesture({
-  onSwipeLeft,
-  onSwipeRight,
-  threshold = 120,
+  onSwipeUp,
+  onSwipeDown,
+  threshold = 100,
 }: SwipeGestureOptions) {
-  const [{ x, rotate, opacity }, api] = useSpring(() => ({
-    x: 0,
-    rotate: 0,
+  const [{ y, opacity }, api] = useSpring(() => ({
+    y: 0,
     opacity: 1,
     config: { tension: 300, friction: 30 },
   }))
 
-  // Direction indicator opacities
-  const [{ approveOpacity, rejectOpacity }, indicatorApi] = useSpring(() => ({
+  const [{ approveOpacity, skipOpacity }, indicatorApi] = useSpring(() => ({
     approveOpacity: 0,
-    rejectOpacity: 0,
+    skipOpacity: 0,
   }))
 
   const bind = useDrag(
-    ({ active, movement: [mx], velocity: [vx], direction: [dx] }) => {
-      const trigger = Math.abs(mx) > threshold || Math.abs(vx) > 0.5
-      const goLeft  = mx < 0 && trigger
-      const goRight = mx > 0 && trigger
+    ({ active, movement: [, my], velocity: [, vy] }) => {
+      const trigger = Math.abs(my) > threshold || Math.abs(vy) > 0.5
+      const goUp   = my < 0 && trigger   // swipe up   = approve
+      const goDown = my > 0 && trigger   // swipe down = skip
 
-      if (!active && goLeft) {
-        api.start({ x: -window.innerWidth * 1.5, rotate: -20, opacity: 0 })
-        onSwipeLeft?.()
-      } else if (!active && goRight) {
-        api.start({ x: window.innerWidth * 1.5, rotate: 20, opacity: 0 })
-        onSwipeRight?.()
+      if (!active && goUp) {
+        api.start({ y: -window.innerHeight * 1.5, opacity: 0 })
+        onSwipeUp?.()
+      } else if (!active && goDown) {
+        api.start({ y: window.innerHeight * 1.5, opacity: 0 })
+        onSwipeDown?.()
       } else if (!active) {
         // Snap back
-        api.start({ x: 0, rotate: 0, opacity: 1 })
-        indicatorApi.start({ approveOpacity: 0, rejectOpacity: 0 })
+        api.start({ y: 0, opacity: 1 })
+        indicatorApi.start({ approveOpacity: 0, skipOpacity: 0 })
       } else {
         // Follow finger
-        const rot = mx / 20
-        api.start({ x: mx, rotate: rot, opacity: 1, immediate: true })
-        const pct = Math.min(Math.abs(mx) / threshold, 1)
+        api.start({ y: my, opacity: 1, immediate: true })
+        const pct = Math.min(Math.abs(my) / threshold, 1)
         indicatorApi.start({
-          approveOpacity: mx > 20 ? pct : 0,
-          rejectOpacity:  mx < -20 ? pct : 0,
+          approveOpacity: my < -20 ? pct : 0,
+          skipOpacity:    my > 20  ? pct : 0,
           immediate: true,
         })
       }
     },
-    { filterTaps: true, axis: 'x' }
+    { filterTaps: true, axis: 'y' }
   )
 
-  return { bind, springStyle: { x, rotate, opacity }, approveOpacity, rejectOpacity }
+  return { bind, springStyle: { y, opacity }, approveOpacity, skipOpacity }
 }
