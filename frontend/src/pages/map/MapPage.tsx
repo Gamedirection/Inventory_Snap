@@ -213,6 +213,7 @@ function FloorPlanPanel({
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null)
+  const [movingPinId, setMovingPinId] = useState<string | null>(null)
   const [pendingNewPin, setPendingNewPin] = useState(false)
   const [editItemOpen, setEditItemOpen] = useState(false)
 
@@ -269,6 +270,7 @@ function FloorPlanPanel({
       setSelectedLocationId(sortedLocations[0]?.id ?? null)
       setSelectedItemId(null)
       setSelectedPinId(null)
+      setMovingPinId(null)
       setPendingNewPin(false)
     }
   }, [activeFloorId, getRootFloorId, selectedLocationId, sortedLocations])
@@ -616,12 +618,37 @@ function FloorPlanPanel({
               imageHeight={floorMap?.height}
               pins={pins}
               selectedPinId={selectedPinId}
+              movingPinId={movingPinId}
               onPinSelect={(pinId, itemId) => {
+                if (movingPinId === pinId) {
+                  // Tap same pin again → cancel move mode
+                  setMovingPinId(null)
+                  return
+                }
                 setSelectedItemId(itemId)
                 setSelectedPinId(pinId)
+                setMovingPinId(pinId)   // immediately enter move mode
                 setPendingNewPin(false)
               }}
               onCanvasClick={(x, y) => {
+                if (movingPinId) {
+                  // Move the selected pin to tapped location
+                  const targetItem = items.find((entry) =>
+                    entry.pins?.some((p) => p.id === movingPinId)
+                  )
+                  if (!targetItem) return
+                  void saveItemPins(
+                    targetItem.id,
+                    targetItem.pins.map((p) =>
+                      p.id === movingPinId
+                        ? { id: p.id, x, y }
+                        : { id: p.id, x: p.x, y: p.y }
+                    ),
+                    movingPinId,
+                  )
+                  setMovingPinId(null)
+                  return
+                }
                 if (!selectedItem) {
                   toast.error('Select an item before placing a pin')
                   return
@@ -641,20 +668,6 @@ function FloorPlanPanel({
                     ...selectedItemPins.map((pin) => ({ id: pin.id, x: pin.x, y: pin.y })),
                     { x, y },
                   ],
-                )
-              }}
-              onPinMove={(pinId, itemId, x, y) => {
-                const item = items.find((entry) => entry.id === itemId)
-                if (!item) {
-                  return
-                }
-                setSelectedItemId(itemId)
-                setSelectedPinId(pinId)
-                setPendingNewPin(false)
-                void saveItemPins(
-                  itemId,
-                  item.pins.map((pin) => pin.id === pinId ? { id: pin.id, x, y } : { id: pin.id, x: pin.x, y: pin.y }),
-                  pinId,
                 )
               }}
             />

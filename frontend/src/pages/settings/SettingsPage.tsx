@@ -3,6 +3,7 @@ import type { ChangeEvent, ElementType } from 'react'
 import {
   Settings, User, BookUser,
   LogOut, ChevronRight, Mail, Pencil, Plus, Trash2, Phone, Building2, Lock, ImagePlus,
+  Download, Loader2, Package, ChevronDown,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { AppShell } from '@/components/layout/AppShell'
@@ -10,29 +11,17 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useAuthStore } from '@/store/authStore'
 import { useChangePassword, useUpdateMe } from '@/api/hooks/useAuth'
+import { useSites, useSiteMembers } from '@/api/hooks/useSites'
+import { useItems } from '@/api/hooks/useItems'
+import { useCreateExport, useExportJob } from '@/api/hooks/usePhotos'
+import { useSiteStore } from '@/store/siteStore'
 import { cn } from '@/lib/utils'
+import {
+  loadContacts, saveContacts, upsertContact, deleteContact as removeContact,
+} from '@/lib/contacts'
+import type { Contact } from '@/lib/contacts'
 
 type Tab = 'settings' | 'profile' | 'contacts'
-
-// ── Contact book (local, persisted in localStorage) ──────────────────────────
-
-interface Contact {
-  id: string
-  name: string
-  email?: string
-  phone?: string
-  org?: string
-}
-
-const CONTACTS_KEY = 'inventory-snap-contacts'
-
-function loadContacts(): Contact[] {
-  try { return JSON.parse(localStorage.getItem(CONTACTS_KEY) ?? '[]') } catch { return [] }
-}
-
-function saveContacts(contacts: Contact[]) {
-  localStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts))
-}
 
 async function readFileAsDataUrl(file: File): Promise<string> {
   return await new Promise((resolve, reject) => {
@@ -43,10 +32,72 @@ async function readFileAsDataUrl(file: File): Promise<string> {
   })
 }
 
+// ── Backup row ────────────────────────────────────────────────────────────────
+
+function BackupRow({ siteId, siteName }: { siteId: string; siteName: string }) {
+  const [jobId, setJobId] = useState<string | null>(null)
+  const createExport = useCreateExport(siteId)
+  const { data: job } = useExportJob(siteId, jobId)
+
+  // Auto-download when job completes
+  const status = job?.status
+  if (status === 'completed' && job?.download_url && jobId) {
+    // Use the backend /download redirect endpoint instead of presigned URL
+    const backendUrl = `/api/v1/sites/${siteId}/export/${jobId}/download`
+    const a = document.createElement('a')
+    a.href = backendUrl
+    a.download = `${siteName}-backup.xlsx`
+    a.click()
+    setJobId(null)
+  }
+
+  const handleDownload = async () => {
+    try {
+      const newJob = await createExport.mutateAsync()
+      setJobId(newJob.id)
+      toast('Generating backup…', { icon: '📦' })
+    } catch {
+      toast.error('Failed to start backup')
+    }
+  }
+
+  const isPending = createExport.isPending || (!!jobId && status !== 'completed' && status !== 'failed')
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5">
+      <div className="w-8 h-8 rounded-lg bg-kraft-200 flex items-center justify-center flex-shrink-0">
+        <Building2 className="w-4 h-4 text-kraft-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-kraft-700 truncate">{siteName}</p>
+        {status === 'failed' && (
+          <p className="text-xs text-accent-rust">Export failed — try again</p>
+        )}
+        {isPending && (
+          <p className="text-xs text-kraft-400">Generating XLSX…</p>
+        )}
+      </div>
+      <button
+        onClick={handleDownload}
+        disabled={isPending}
+        className="flex items-center gap-1.5 text-xs font-medium text-kraft-600
+                   hover:text-kraft-800 transition-colors disabled:opacity-40"
+      >
+        {isPending
+          ? <Loader2 className="w-4 h-4 animate-spin" />
+          : <Download className="w-4 h-4" />
+        }
+        {isPending ? 'Generating…' : 'Download'}
+      </button>
+    </div>
+  )
+}
+
 // ── Settings tab ─────────────────────────────────────────────────────────────
 
 function SettingsTab() {
   const logout = useAuthStore((s) => s.logout)
+  const { data: sites = [] } = useSites()
 
   const handleLogout = () => {
     logout()
@@ -56,16 +107,25 @@ function SettingsTab() {
   return (
     <div className="space-y-4">
       <div className="card divide-y divide-kraft-200 p-0 overflow-hidden">
-        <SettingRow
-          icon={Building2}
-          label="App version"
-          value="1.0.0"
-        />
-        <SettingRow
-          icon={Settings}
-          label="AI provider"
-          value="Ollama (local)"
-        />
+        <SettingRow icon={Building2} label="App version" value="1.0.0" />
+        <SettingRow icon={Settings}  label="AI provider"  value="Ollama (local)" />
+      </div>
+
+      {/* Backup / Download */}
+      <div>
+        <p className="section-title mb-2">Backup &amp; Export</p>
+        <div className="card divide-y divide-kraft-200 p-0 overflow-hidden">
+          {sites.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-kraft-400">No sites yet.</p>
+          ) : (
+            sites.map((site) => (
+              <BackupRow key={site.id} siteId={site.id} siteName={site.name} />
+            ))
+          )}
+        </div>
+        <p className="mt-1.5 text-xs text-kraft-400">
+          Downloads a full XLSX spreadsheet with all items, locations, photos, and movements.
+        </p>
       </div>
 
       <div className="card divide-y divide-kraft-200 p-0 overflow-hidden">
@@ -315,6 +375,96 @@ function ProfileTab() {
   )
 }
 
+// ── Contact card with owned items ─────────────────────────────────────────────
+
+function ContactCard({
+  contact,
+  onEdit,
+  onDelete,
+}: {
+  contact: Contact
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const { activeSiteId } = useSiteStore()
+  const { data } = useItems(expanded ? activeSiteId : null, { size: 200 })
+
+  const ownedItems = (data?.items ?? []).filter((item) => {
+    if (!item.owner_contact_name) return false
+    return item.owner_contact_name.split(',').map((s) => s.trim()).some(
+      (o) => o.toLowerCase() === contact.name.toLowerCase()
+    )
+  })
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className="w-9 h-9 rounded-full bg-kraft-700 flex items-center justify-center flex-shrink-0">
+          <span className="text-sm font-bold text-kraft-100">
+            {contact.name[0].toUpperCase()}
+          </span>
+        </div>
+        <button
+          className="flex-1 min-w-0 text-left"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <p className="text-sm font-medium text-kraft-700 truncate">{contact.name}</p>
+          <p className="text-xs text-kraft-400 truncate">
+            {[contact.email, contact.phone, contact.org].filter(Boolean).join(' · ')}
+          </p>
+        </button>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="p-1.5 rounded-lg text-kraft-400 hover:text-kraft-600 hover:bg-kraft-200 transition-colors"
+          title="Show owned items"
+        >
+          <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', expanded && 'rotate-180')} />
+        </button>
+        <button
+          onClick={onEdit}
+          className="p-1.5 rounded-lg text-kraft-400 hover:text-kraft-600 hover:bg-kraft-200 transition-colors"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-1.5 rounded-lg text-kraft-400 hover:text-accent-rust hover:bg-accent-rust/10 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="px-4 pb-3 bg-kraft-50 border-t border-kraft-100">
+          {!activeSiteId ? (
+            <p className="text-xs text-kraft-400 py-2">Select an active site to see owned items.</p>
+          ) : ownedItems.length === 0 ? (
+            <p className="text-xs text-kraft-400 py-2 flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5" /> No items owned in this site.
+            </p>
+          ) : (
+            <div className="space-y-1 pt-2">
+              <p className="text-[10px] text-kraft-400 uppercase tracking-wide font-medium mb-1.5">
+                Owns {ownedItems.length} item{ownedItems.length !== 1 ? 's' : ''}
+              </p>
+              {ownedItems.map((item) => (
+                <div key={item.id} className="flex items-center gap-2 text-xs text-kraft-600 py-1">
+                  <Package className="w-3 h-3 flex-shrink-0 text-kraft-400" />
+                  <span className="truncate">{item.name}</span>
+                  {item.category && (
+                    <span className="ml-auto text-kraft-400 truncate">{item.category}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Contacts tab ─────────────────────────────────────────────────────────────
 
 function ContactsTab() {
@@ -322,32 +472,56 @@ function ContactsTab() {
   const [editContact, setEdit]    = useState<Contact | null>(null)
   const [addOpen, setAddOpen]     = useState(false)
 
+  // Also surface site members as contacts
+  const { activeSiteId } = useSiteStore()
+  const { data: members = [] } = useSiteMembers(activeSiteId)
+
+  // Merge members into contacts: add any member not already present by name
+  const memberNames = new Set(contacts.map((c) => c.name.toLowerCase()))
+  const membersAsContacts: Contact[] = members
+    .filter((m) => {
+      const name = m.user_display_name || m.user_email || ''
+      return name && !memberNames.has(name.toLowerCase())
+    })
+    .map((m) => ({
+      id: `member-${m.user_id}`,
+      name: m.user_display_name ?? m.user_email ?? 'Unknown',
+      email: m.user_email ?? undefined,
+    }))
+
+  const allContacts = [...contacts, ...membersAsContacts]
+
   const persist = (next: Contact[]) => { setContacts(next); saveContacts(next) }
 
   const handleSave = (c: Contact) => {
-    const existing = contacts.find((x) => x.id === c.id)
-    if (existing) {
-      persist(contacts.map((x) => (x.id === c.id ? c : x)))
-      toast.success('Contact updated')
-    } else {
-      persist([...contacts, c])
-      toast.success('Contact added')
-    }
+    upsertContact(c)
+    setContacts(loadContacts())
+    toast.success(contacts.find((x) => x.id === c.id) ? 'Contact updated' : 'Contact added')
     setEdit(null)
     setAddOpen(false)
   }
 
   const handleDelete = (id: string) => {
     if (!window.confirm('Delete this contact?')) return
-    persist(contacts.filter((c) => c.id !== id))
+    // Don't allow deleting member-derived contacts
+    if (id.startsWith('member-')) { toast.error("Can't remove a site member here"); return }
+    removeContact(id)
+    persist(loadContacts())
     toast.success('Contact removed')
+  }
+
+  // Save a member-derived contact permanently
+  const handleSaveMember = (c: Contact) => {
+    const realContact: Contact = { ...c, id: crypto.randomUUID() }
+    upsertContact(realContact)
+    setContacts(loadContacts())
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-kraft-500 font-medium uppercase tracking-wide">
-          {contacts.length} contact{contacts.length !== 1 ? 's' : ''}
+          {allContacts.length} contact{allContacts.length !== 1 ? 's' : ''}
         </p>
         <button
           onClick={() => setAddOpen(true)}
@@ -359,7 +533,7 @@ function ContactsTab() {
         </button>
       </div>
 
-      {contacts.length === 0 ? (
+      {allContacts.length === 0 ? (
         <div className="flex flex-col items-center py-16 text-center">
           <BookUser className="w-10 h-10 text-kraft-300 mb-3" />
           <p className="text-sm text-kraft-500">No contacts yet.</p>
@@ -367,34 +541,28 @@ function ContactsTab() {
         </div>
       ) : (
         <div className="card divide-y divide-kraft-200 p-0 overflow-hidden">
-          {contacts.map((c) => (
-            <div key={c.id} className="flex items-center gap-3 px-4 py-3">
-              <div className="w-9 h-9 rounded-full bg-kraft-700 flex items-center justify-center flex-shrink-0">
-                <span className="text-sm font-bold text-kraft-100">
-                  {c.name[0].toUpperCase()}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-kraft-700 truncate">{c.name}</p>
-                <p className="text-xs text-kraft-400 truncate">
-                  {[c.email, c.phone, c.org].filter(Boolean).join(' · ')}
-                </p>
-              </div>
-              <button
-                onClick={() => setEdit(c)}
-                className="p-1.5 rounded-lg text-kraft-400 hover:text-kraft-600 hover:bg-kraft-200 transition-colors"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => handleDelete(c.id)}
-                className="p-1.5 rounded-lg text-kraft-400 hover:text-accent-rust hover:bg-accent-rust/10 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+          {allContacts.map((c) => (
+            <ContactCard
+              key={c.id}
+              contact={c}
+              onEdit={() => {
+                if (c.id.startsWith('member-')) {
+                  handleSaveMember(c)
+                  toast('Member saved as contact — you can now edit them.')
+                } else {
+                  setEdit(c)
+                }
+              }}
+              onDelete={() => handleDelete(c.id)}
+            />
           ))}
         </div>
+      )}
+
+      {activeSiteId && membersAsContacts.length > 0 && (
+        <p className="text-xs text-kraft-400">
+          Site members shown above are automatically available as owners. Save them to edit details.
+        </p>
       )}
 
       {(addOpen || editContact) && (
@@ -417,7 +585,7 @@ function ContactFormModal({
   onSave: (c: Contact) => void
   onClose: () => void
 }) {
-  const isNew = !loadContacts().find((c) => c.id === contact.id)
+  const isNew = !loadContacts().find((c) => c.id === contact.id && !contact.id.startsWith('member-'))
   const [name,  setName]  = useState(contact.name)
   const [email, setEmail] = useState(contact.email ?? '')
   const [phone, setPhone] = useState(contact.phone ?? '')

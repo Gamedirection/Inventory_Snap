@@ -84,6 +84,23 @@ Inventory_Snap/
         └── ai/                   # Provider abstraction + pipeline
 ```
 
+## Features
+
+- **Photo capture** — take photos with your device camera or import from files; works offline, syncs when back online
+- **AI proposals** — photos are processed by Ollama (or OpenAI/Claude) to detect objects and suggest inventory entries
+- **Swipe review** — swipe UP to approve + rescan, DOWN to skip + rescan, LEFT to reject; edit any field before approving
+- **Inventory management** — search, filter, and manage all items; full edit form with category, condition, owners, serial numbers, purchase info, and tags
+- **Item location** — automatically derived from the most recent photo assigned to the item (no manual entry needed)
+- **Floor plan maps** — upload a floor plan image, draw room outlines, and place item pins; click a pin to move it
+- **Contact book** — owners are auto-saved as contacts when assigned to items; contacts show what they own across the inventory; site members automatically appear as contacts
+- **Export / backup** — download a full XLSX export per site (items, locations, movements, photos, audit)
+- **Multi-site** — manage multiple separate inventory sites; archive sites to hide without deleting data
+- **Settings** — profile management, password change, per-site backup download, contact book management
+
+## Item Conditions
+
+`new` · `excellent` · `good` · `fair` · `poor` · `broken` · `in_repair` · `lost` · `misplaced` · `shared` · `stolen` · `archived` · `unknown`
+
 ## Core Invariant
 
 **AI never writes to the `items` table.** Only `review_service.approve()` creates canonical inventory items. The AI pipeline only writes to `proposed_items`. This is enforced at the service layer.
@@ -100,5 +117,7 @@ Base path: `/api/v1/`
 - `GET /sites/{id}/review/queue` — AI proposal review queue
 - `POST /review/proposals/{id}/approve` — approve a proposal → creates item
 - `POST /review/proposals/{id}/reject` — reject a proposal
-- `GET /sites/{id}/items` — inventory search with filters
+- `GET /sites/{id}/items` — inventory search with filters (`search`, `category`, `condition`, `owner`)
+- `GET /sites/{id}/items/{item_id}/movements` — movement history
 - `POST /sites/{id}/export` — async export job (XLSX)
+- `GET /sites/{id}/export/{job_id}/download` — download completed export

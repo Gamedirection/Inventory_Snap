@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { useUpdateItem, useItems } from '@/api/hooks/useItems'
 import type { ItemOut } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { loadContacts, ensureContact } from '@/lib/contacts'
 import toast from 'react-hot-toast'
 
 const CONDITIONS = [
@@ -128,11 +129,9 @@ function CategoryCombobox({
 // ── Owner combobox ────────────────────────────────────────────────────────────
 
 function OwnerCombobox({
-  siteId,
   value,
   onChange,
 }: {
-  siteId: string
   value: string[]
   onChange: (v: string[]) => void
 }) {
@@ -140,18 +139,8 @@ function OwnerCombobox({
   const [input, setInput] = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
-  // Collect distinct owner names already used across items
-  const { data } = useItems(siteId, { size: 200 })
-  const allOwners = Array.from(
-    new Set(
-      (data?.items ?? [])
-        .flatMap((i) =>
-          i.owner_contact_name
-            ? i.owner_contact_name.split(',').map((s) => s.trim()).filter(Boolean)
-            : []
-        )
-    )
-  ).sort()
+  // Read from shared contact book
+  const allOwners = loadContacts().map((c) => c.name).sort()
 
   const filtered = input
     ? allOwners.filter((o) => o.toLowerCase().includes(input.toLowerCase()))
@@ -171,7 +160,11 @@ function OwnerCombobox({
   }, [])
 
   const addOwner = (name: string) => {
-    if (!value.includes(name)) onChange([...value, name])
+    const trimmed = name.trim()
+    if (!trimmed) return
+    // Auto-create contact if it doesn't exist yet
+    ensureContact(trimmed)
+    if (!value.includes(trimmed)) onChange([...value, trimmed])
     setInput('')
     setOpen(false)
   }
@@ -404,7 +397,7 @@ export function ItemEditModal({ open, onClose, siteId, item }: ItemEditModalProp
         <div>
           <label className="text-xs text-kraft-500 font-medium">Owner(s)</label>
           <div className="mt-1">
-            <OwnerCombobox siteId={siteId} value={owners} onChange={setOwners} />
+            <OwnerCombobox value={owners} onChange={setOwners} />
           </div>
         </div>
 

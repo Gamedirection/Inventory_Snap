@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Plus, Building2, Users, Package, ChevronRight } from 'lucide-react'
+import { Plus, Building2, Users, Package, ChevronRight, Archive, MoreVertical } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
-import { useSites, useCreateSite } from '@/api/hooks/useSites'
+import { useSites, useCreateSite, useDeleteSite } from '@/api/hooks/useSites'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
@@ -23,38 +23,82 @@ type FormValues = z.infer<typeof schema>
 
 function SiteCard({ site }: { site: SiteOut }) {
   const navigate = useNavigate()
-  const { setActiveSite } = useSiteStore()
+  const { setActiveSite, activeSiteId } = useSiteStore()
+  const archive = useDeleteSite(site.id)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const handleClick = () => {
     setActiveSite(site.id, site.name)
     navigate({ to: `/sites/${site.id}` })
   }
 
+  const handleArchive = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setMenuOpen(false)
+    if (!window.confirm(`Archive "${site.name}"? It will be hidden and all data preserved.`)) return
+    try {
+      await archive.mutateAsync()
+      if (activeSiteId === site.id) useSiteStore.getState().setActiveSite(null, null)
+      toast.success(`"${site.name}" archived`)
+    } catch {
+      toast.error('Failed to archive site')
+    }
+  }
+
   return (
-    <Card onClick={handleClick} hoverable>
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-xl bg-kraft-200 flex items-center justify-center flex-shrink-0">
-          <Building2 className="w-6 h-6 text-kraft-600" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-kraft-700 truncate">{site.name}</h3>
-          {site.description && (
-            <p className="text-xs text-kraft-400 truncate mt-0.5">{site.description}</p>
-          )}
-          <div className="flex items-center gap-3 mt-1.5">
-            <span className="flex items-center gap-1 text-xs text-kraft-400">
-              <Package className="w-3 h-3" />
-              {site.item_count} items
-            </span>
-            <span className="flex items-center gap-1 text-xs text-kraft-400">
-              <Users className="w-3 h-3" />
-              {site.member_count} members
-            </span>
+    <div className="relative">
+      <Card onClick={handleClick} hoverable>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-kraft-200 flex items-center justify-center flex-shrink-0">
+            <Building2 className="w-6 h-6 text-kraft-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-kraft-700 truncate">{site.name}</h3>
+            {site.description && (
+              <p className="text-xs text-kraft-400 truncate mt-0.5">{site.description}</p>
+            )}
+            <div className="flex items-center gap-3 mt-1.5">
+              <span className="flex items-center gap-1 text-xs text-kraft-400">
+                <Package className="w-3 h-3" />
+                {site.item_count} items
+              </span>
+              <span className="flex items-center gap-1 text-xs text-kraft-400">
+                <Users className="w-3 h-3" />
+                {site.member_count} members
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
+              className="p-1.5 rounded-lg text-kraft-400 hover:text-kraft-600 hover:bg-kraft-200 transition-colors"
+              aria-label="Site options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            <ChevronRight className="w-4 h-4 text-kraft-400 flex-shrink-0" />
           </div>
         </div>
-        <ChevronRight className="w-4 h-4 text-kraft-400 flex-shrink-0" />
-      </div>
-    </Card>
+      </Card>
+
+      {/* Dropdown menu */}
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="absolute right-2 top-12 z-50 bg-white border border-kraft-200 rounded-xl shadow-xl overflow-hidden min-w-[160px]">
+            <button
+              onClick={handleArchive}
+              disabled={archive.isPending}
+              className="flex items-center gap-2 w-full px-4 py-3 text-sm text-kraft-600
+                         hover:bg-kraft-50 transition-colors text-left"
+            >
+              <Archive className="w-4 h-4" />
+              Archive site
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -123,12 +167,7 @@ function CreateSiteModal({
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button
-            type="button"
-            variant="ghost"
-            className="flex-1"
-            onClick={onClose}
-          >
+          <Button type="button" variant="ghost" className="flex-1" onClick={onClose}>
             Cancel
           </Button>
           <Button

@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import {
   QrCode, MapPin, CheckCircle2, Package,
-  DollarSign, Calendar, Hash, Tag, ChevronLeft, ChevronRight, Trash2, Pencil
+  DollarSign, Calendar, Hash, Tag, ChevronLeft, ChevronRight, Trash2, Pencil, ExternalLink
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { QRCodeSVG } from 'qrcode.react'
@@ -47,10 +47,12 @@ function PhotoGallery({
   urls,
   idx,
   onChange,
+  onOpenEditor,
 }: {
   urls: string[]
   idx: number
   onChange: (idx: number) => void
+  onOpenEditor?: () => void
 }) {
   if (urls.length === 0) return null
 
@@ -61,6 +63,18 @@ function PhotoGallery({
         alt={`Photo ${idx + 1}`}
         className="w-full h-full object-contain"
       />
+      {/* Pin editor button — top-right corner */}
+      {onOpenEditor && (
+        <button
+          onClick={onOpenEditor}
+          className="absolute top-2 right-2 w-8 h-8 rounded-lg bg-kraft-900/60
+                     text-white flex items-center justify-center
+                     hover:bg-kraft-900/80 transition-colors"
+          aria-label="Open photo pin editor"
+        >
+          <ExternalLink className="w-4 h-4" />
+        </button>
+      )}
       {urls.length > 1 && (
         <>
           <button
@@ -231,7 +245,12 @@ export function ItemDetailPage() {
 
         {/* Photo gallery */}
         {photoUrls.length > 0 ? (
-          <PhotoGallery urls={photoUrls} idx={photoIndex} onChange={setPhotoIndex} />
+          <PhotoGallery
+            urls={photoUrls}
+            idx={photoIndex}
+            onChange={setPhotoIndex}
+            onOpenEditor={selectedEditorPhoto ? () => setEditorOpen(true) : undefined}
+          />
         ) : (
           <div className="aspect-video bg-kraft-100 border border-kraft-200 rounded-xl
                           flex items-center justify-center">
@@ -391,16 +410,6 @@ export function ItemDetailPage() {
               Archive
             </Button>
           </div>
-          {selectedEditorPhoto && (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full mt-2"
-              onClick={() => setEditorOpen(true)}
-            >
-              Jump to editor
-            </Button>
-          )}
         </div>
       </div>
 

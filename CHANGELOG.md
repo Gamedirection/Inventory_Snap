@@ -1,5 +1,62 @@
 # Changelog
 
+## [Unreleased] — 2026-04-08
+
+### Session: UX Polish — Contacts, Owners, Settings & Navigation
+
+#### Added
+
+**Contacts system**
+- New shared contact book stored in `localStorage` (`lib/contacts.ts`) — single source of truth for all contact data across the app
+- Contacts are **auto-created** when you assign an owner to an item: typing a new name in the Owner field creates a contact automatically
+- Site members automatically appear in the Contacts tab as virtual contacts (sourced from `useSiteMembers`)
+- Each contact now has an expandable section showing every item they own in the active site
+- Members can be "saved" as persistent contacts by clicking the edit button on a member-derived contact
+
+**Item editing**
+- Owner field (`OwnerCombobox`) now reads from the shared contact book instead of scraping owner names from existing items
+- Typing a new owner name adds that name as a contact immediately on selection
+
+**Settings / Contacts tab**
+- Replaced local contact storage functions with imports from `lib/contacts.ts`
+- Added site members panel — members from the active site appear as contacts without duplication
+- Per-contact expand chevron reveals all items owned by that contact in the current site
+
+**Navigation**
+- Review tab merged into Camera tab (single Camera+Review page)
+- Inventory moved to its own nav item
+- Settings page added with three tabs: Settings, Profile, Contacts
+- Archive site: tap ⋮ on a site card to archive it (soft-delete, data preserved)
+
+**Camera / Review**
+- Swipe UP = approve + AI rescan; Swipe DOWN = skip + AI rescan; Swipe LEFT = reject (no rescan)
+- Click card or pencil icon to edit proposal fields before approving
+- Review badge on Camera tab updates via SSE in real time
+
+**Item conditions**
+- Added: Broken, In Repair, Lost, Misplaced, Shared/Lended, Stolen, Archived
+- Human-readable labels throughout (e.g. `in_repair` → "In Repair")
+
+**Item location**
+- An item's location is derived from its most recent linked photo's location (no manual location field needed)
+- Backend `_enrich_item` queries `ItemPhoto JOIN Photo ORDER BY created_at DESC LIMIT 1`
+
+**Floor plan pin editing**
+- Removed drag-and-drop (conflicted with touch pan/zoom)
+- New click-once-to-move: click a pin to select it (turns amber), then click the new position to move it
+- Jump-to-photo-editor button in item photo gallery (ExternalLink icon overlay)
+
+**Backup / Export**
+- Settings → Backup & Export: one download button per site
+- Polls export job status, auto-downloads XLSX when complete
+- Uses backend `/export/{job_id}/download` redirect endpoint (no direct MinIO presigned URLs)
+
+#### Fixed
+- `useCallback` missing import in `MapPage.tsx` after linter changes (caused compile error)
+- Backend ASGI crash after linter auto-save triggered WatchFiles reload; fixed by `docker compose restart backend`
+
+---
+
 ## [Unreleased] — 2026-04-07
 
 ### Session: AI Pipeline Debug + API Contract Fixes

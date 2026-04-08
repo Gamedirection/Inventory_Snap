@@ -221,6 +221,46 @@ export function usePinItem(siteId: string) {
   })
 }
 
+// ── Export / backup ──────────────────────────────────────────────────────────
+
+export function useCreateExport(siteId: string) {
+  return useMutation({
+    mutationFn: async (filters: Record<string, unknown> = {}) => {
+      const { data } = await apiClient.post<{
+        id: string
+        status: string
+        format: string
+        download_url?: string | null
+      }>(`/api/v1/sites/${siteId}/export`, {
+        format: 'xlsx',
+        filters,
+      })
+      return data
+    },
+  })
+}
+
+export function useExportJob(siteId: string, jobId: string | null) {
+  return useQuery({
+    queryKey: ['export', siteId, jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{
+        id: string
+        status: string
+        format: string
+        download_url?: string | null
+      }>(`/api/v1/sites/${siteId}/export/${jobId}`)
+      return data
+    },
+    enabled: !!siteId && !!jobId,
+    refetchInterval: (q) => {
+      const s = q.state.data?.status
+      if (s === 'completed' || s === 'failed') return false
+      return 2000
+    },
+  })
+}
+
 export function useReprocessPhoto(siteId: string) {
   const qc = useQueryClient()
   return useMutation({

@@ -22,10 +22,11 @@ interface FloorPlanBoardProps {
   imageHeight?: number | null
   pins: FloorPlanPin[]
   selectedPinId?: string | null
+  /** Pin currently in "move mode" — shown in amber and awaiting a canvas click */
+  movingPinId?: string | null
   readOnly?: boolean
   className?: string
   onPinSelect?: (pinId: string, itemId: string) => void
-  onPinMove?: (pinId: string, itemId: string, x: number, y: number) => void
   onCanvasClick?: (x: number, y: number) => void
 }
 
@@ -92,10 +93,10 @@ export function FloorPlanBoard({
   imageHeight,
   pins,
   selectedPinId,
+  movingPinId,
   readOnly = false,
   className,
   onPinSelect,
-  onPinMove,
   onCanvasClick,
 }: FloorPlanBoardProps) {
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -209,20 +210,16 @@ export function FloorPlanBoard({
   })
 
   const handleCanvasClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!onCanvasClick) {
-      return
-    }
+    if (!onCanvasClick) return
 
     const target = e.target
     const targetName = target.name()
-    if (target !== target.getStage() && targetName !== 'floor-image') {
-      return
-    }
+    // Allow canvas clicks when in move-mode even if clicking on a non-image element
+    const isBackground = target === target.getStage() || targetName === 'floor-image'
+    if (!isBackground && !movingPinId) return
 
     const pos = stageRef.current?.getPointerPosition()
-    if (!pos) {
-      return
-    }
+    if (!pos) return
 
     const normalized = toBoardCoordinates(pos)
     onCanvasClick(normalized.x, normalized.y)
@@ -347,17 +344,15 @@ export function FloorPlanBoard({
                 const x = (pin.x ?? 0) * contentWidth
                 const y = (pin.y ?? 0) * contentHeight
                 const isSelected = pin.id === selectedPinId
+                const isMoving = pin.id === movingPinId
+                const fillColor = isMoving ? '#d97706' : (pin.color ?? '#4a7c59')
+                const radius = isMoving ? 13 : isSelected ? 11 : 9
 
                 return (
                   <Group
                     key={pin.id}
                     x={x}
                     y={y}
-                    draggable={!readOnly}
-                    dragBoundFunc={(pos) => ({
-                      x: Math.min(Math.max(pos.x, 0), contentWidth),
-                      y: Math.min(Math.max(pos.y, 0), contentHeight),
-                    })}
                     onClick={(e) => {
                       e.cancelBubble = true
                       onPinSelect?.(pin.id, pin.itemId)
@@ -366,28 +361,24 @@ export function FloorPlanBoard({
                       e.cancelBubble = true
                       onPinSelect?.(pin.id, pin.itemId)
                     }}
-                    onDragEnd={(e) => {
-                      const nextX = Math.min(Math.max(e.target.x() / contentWidth, 0), 1)
-                      const nextY = Math.min(Math.max(e.target.y() / contentHeight, 0), 1)
-                      onPinMove?.(pin.id, pin.itemId, nextX, nextY)
-                    }}
                   >
                     <Circle
-                      radius={isSelected ? 11 : 9}
-                      fill={pin.color ?? '#4a7c59'}
-                      stroke={isSelected ? '#f7f2e8' : '#fff'}
-                      strokeWidth={isSelected ? 3 : 2}
-                      shadowColor="rgba(0, 0, 0, 0.2)"
-                      shadowBlur={6}
+                      radius={radius}
+                      fill={fillColor}
+                      stroke={isMoving ? '#fff' : isSelected ? '#f7f2e8' : '#fff'}
+                      strokeWidth={isMoving ? 3 : isSelected ? 3 : 2}
+                      shadowColor="rgba(0,0,0,0.25)"
+                      shadowBlur={isMoving ? 10 : 6}
                       shadowOffsetY={2}
+                      name="pin-circle"
                     />
                     <Text
                       x={14}
                       y={-8}
-                      text={pin.label}
+                      text={isMoving ? `Moving: ${pin.label}` : pin.label}
                       fontSize={11}
                       padding={5}
-                      fill="#2d241b"
+                      fill={isMoving ? '#92400e' : '#2d241b'}
                       listening={false}
                     />
                   </Group>
@@ -401,7 +392,9 @@ export function FloorPlanBoard({
       <p className="text-xs text-kraft-400 text-center">
         {readOnly
           ? 'Tap a pin to inspect it.'
-          : 'Pinch to zoom, drag to pan, tap the floor plan to place the selected item, then drag the pin to refine its position.'}
+          : movingPinId
+          ? 'Tap anywhere on the floor plan to move the pin there. Tap the same pin to cancel.'
+          : 'Pinch to zoom · tap a pin to select and move it · tap the map to place a new pin.'}
       </p>
     </div>
   )

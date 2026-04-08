@@ -55,10 +55,28 @@ async def _enrich_item(item: Item, db: AsyncSession) -> ItemOut:
             else:
                 out.primary_photo_url = _photo_url(photo.site_id, photo.id)
 
-    # Location path
-    if item.location_id:
+    # Location path — derived from the most recent linked photo's location.
+    # Falls back to item.location_id if no photos are linked.
+    from app.db.models.photo import Photo
+    effective_location_id: str | None = None
+
+    recent_photo_result = await db.execute(
+        select(Photo.location_id)
+        .join(ItemPhoto, ItemPhoto.photo_id == Photo.id)
+        .where(
+            ItemPhoto.item_id == item.id,
+            Photo.deleted_at.is_(None),
+            Photo.location_id.is_not(None),
+        )
+        .order_by(Photo.created_at.desc())
+        .limit(1)
+    )
+    photo_location_id = recent_photo_result.scalar_one_or_none()
+    effective_location_id = photo_location_id or item.location_id
+
+    if effective_location_id:
         path_parts: list[str] = []
-        current_id = item.location_id
+        current_id = effective_location_id
         seen: set[str] = set()
         while current_id and current_id not in seen:
             seen.add(current_id)
