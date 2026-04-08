@@ -1,7 +1,7 @@
 import type { ProposalOut } from '@/lib/types'
 import { ConfidenceBadge } from '@/components/shared/ConfidenceBadge'
-import { MapPin, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { MapPin, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { cn, withAuthToken } from '@/lib/utils'
 
 interface ReviewCardProps {
   /** The single proposal being reviewed on this card. */
@@ -13,6 +13,8 @@ interface ReviewCardProps {
   /** e.g. "2 of 3" — badge showing position in this photo's proposals. */
   photoIndex: number
   photoTotal: number
+  /** Called when the user taps the edit button. */
+  onEdit?: () => void
 }
 
 /**
@@ -26,6 +28,7 @@ export function ReviewCard({
   locationName,
   photoIndex,
   photoTotal,
+  onEdit,
 }: ReviewCardProps) {
   const bbox = proposal.bounding_box as
     | { x: number; y: number; width: number; height: number }
@@ -37,7 +40,7 @@ export function ReviewCard({
       <div className="relative bg-kraft-900 aspect-[4/3]">
         {photoUrl ? (
           <img
-            src={photoUrl}
+            src={withAuthToken(photoUrl) ?? photoUrl}
             alt="Review photo"
             className="w-full h-full object-contain"
           />
@@ -104,6 +107,15 @@ export function ReviewCard({
               </p>
             )}
           </div>
+          {onEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit() }}
+              className="p-1.5 rounded-lg text-kraft-400 hover:text-kraft-600 hover:bg-kraft-200 transition-colors flex-shrink-0"
+              aria-label="Edit proposal"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -119,11 +131,11 @@ export function ReviewCard({
         <span className="flex flex-col items-center gap-0.5">
           <span className="flex items-center gap-0.5 text-accent-sage">
             <ChevronUp className="w-3 h-3" />
-            Add / Approve
+            Add + rescan
           </span>
           <span className="flex items-center gap-0.5">
             <ChevronDown className="w-3 h-3" />
-            Skip
+            Skip + rescan
           </span>
         </span>
         <span className="flex items-center gap-0.5 justify-end text-accent-sage">

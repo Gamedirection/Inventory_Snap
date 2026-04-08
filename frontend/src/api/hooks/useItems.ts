@@ -137,3 +137,24 @@ export function useItemMovements(siteId: string | null, itemId: string | null) {
     enabled: !!siteId && !!itemId,
   })
 }
+
+export interface LinkedPhoto {
+  photo_id: string
+  url: string
+  thumbnail_url: string
+  is_primary: boolean
+  annotation_bbox: { x: number; y: number; width: number; height: number } | null
+}
+
+export function useItemPhotos(siteId: string | null, itemId: string | null) {
+  return useQuery({
+    queryKey: ['items', siteId ?? '', itemId ?? '', 'photos'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LinkedPhoto[]>(
+        `/api/v1/sites/${siteId}/items/${itemId}/photos`
+      )
+      return data
+    },
+    enabled: !!siteId && !!itemId,
+  })
+}

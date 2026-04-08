@@ -27,7 +27,7 @@ from app.schemas.review import (
     ReviewQueueItem,
     ReviewQueueResponse,
 )
-from app.services.photo_service import get_presigned_url
+from app.api.v1.photos import _photo_url
 
 router = APIRouter(prefix="/sites/{site_id}/review", tags=["review"])
 
@@ -158,12 +158,12 @@ async def get_review_queue(
         # Build photo object
         photo_url = ""
         if photo.original_object_key:
-            photo_url = get_presigned_url(settings.minio_bucket_photos, photo.original_object_key)
+            photo_url = _photo_url(photo.site_id, photo.id)
         thumbnail_url = None
         if photo.thumbnail_object_key:
-            thumbnail_url = get_presigned_url(
-                settings.minio_bucket_thumbnails, photo.thumbnail_object_key
-            )
+            thumbnail_url = f"/api/v1/sites/{photo.site_id}/photos/{photo.id}/thumbnail"
+        elif photo.original_object_key:
+            thumbnail_url = photo_url
 
         location_in_photo = None
         if photo.location_id:

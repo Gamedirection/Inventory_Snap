@@ -71,13 +71,14 @@ export function Modal({ open, onClose, title, children, size = 'md', className }
           'relative w-full bg-kraft-50 rounded-2xl shadow-2xl',
           'border border-kraft-200',
           'animate-in fade-in zoom-in-95 duration-150',
+          'flex flex-col max-h-[90vh]',
           sizeClasses[size],
           className
         )}
       >
-        {/* Header */}
+        {/* Header — fixed, never scrolls */}
         {title && (
-          <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-kraft-200">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-kraft-200 flex-shrink-0">
             <h2 id="modal-title" className="text-base font-semibold text-kraft-700">
               {title}
             </h2>
@@ -91,7 +92,8 @@ export function Modal({ open, onClose, title, children, size = 'md', className }
           </div>
         )}
 
-        <div className={cn(!title && 'pt-5')}>
+        {/* Scrollable body */}
+        <div className={cn('overflow-y-auto flex-1 overscroll-contain', !title && 'pt-5')}>
           {children}
         </div>
       </div>

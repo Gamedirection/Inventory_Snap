@@ -35,7 +35,7 @@ export function SiteSelector() {
             className="absolute inset-0 bg-kraft-900/40 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
-          <div className="relative bg-kraft-50 rounded-t-3xl shadow-2xl max-h-[60vh] overflow-y-auto">
+          <div className="relative bg-kraft-50 rounded-t-3xl shadow-2xl max-h-[75vh] overflow-y-auto pb-[env(safe-area-inset-bottom,16px)]" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 72px)' }}>
             {/* Handle */}
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-kraft-300" />

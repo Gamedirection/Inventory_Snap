@@ -1,13 +1,13 @@
 import { useState, useRef, useCallback } from 'react'
-import { X, MapPin, Tag, Trash2, Plus, ChevronDown } from 'lucide-react'
+import { X, MapPin, Tag, Trash2, Plus, ChevronDown, PackagePlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
 import { usePhotoDetail, usePinItem, useUnpinItem, useUpdatePhotoLocation } from '@/api/hooks/usePhotos'
-import { useItems } from '@/api/hooks/useItems'
+import { useItems, useCreateItem } from '@/api/hooks/useItems'
 import { useLocationFlat } from '@/api/hooks/useLocations'
 import type { PhotoOut, PhotoPin } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { cn, withAuthToken } from '@/lib/utils'
 
 // ── Bounding-box overlay ──────────────────────────────────────────────────────
 
@@ -102,19 +102,19 @@ function PinItemSheet({
   onPinned: () => void
   onCancel: () => void
 }) {
-  const [search, setSearch] = useState('')
-  const pinItem = usePinItem(siteId)
+  const [tab, setTab]         = useState<'search' | 'create'>('search')
+  const [search, setSearch]   = useState('')
+  const [newName, setNewName] = useState('')
+  const [newCat, setNewCat]   = useState('')
+
+  const pinItem    = usePinItem(siteId)
+  const createItem = useCreateItem(siteId)
   const { data: itemData } = useItems(siteId, { search, size: 30 })
   const items = itemData?.items ?? []
 
   const handlePin = async (itemId: string) => {
     try {
-      await pinItem.mutateAsync({
-        photoId,
-        itemId,
-        annotationBbox: pendingBbox,
-        setAsPrimary: false,
-      })
+      await pinItem.mutateAsync({ photoId, itemId, annotationBbox: pendingBbox, setAsPrimary: false })
       toast.success('Item pinned')
       onPinned()
     } catch {
@@ -122,8 +122,26 @@ function PinItemSheet({
     }
   }
 
+  const handleCreateAndPin = async () => {
+    if (!newName.trim()) { toast.error('Name is required'); return }
+    try {
+      const created = await createItem.mutateAsync({
+        name: newName.trim(),
+        category: newCat.trim() || undefined,
+      } as any)
+      await pinItem.mutateAsync({ photoId, itemId: created.id, annotationBbox: pendingBbox, setAsPrimary: true })
+      toast.success(`"${created.name}" created and pinned`)
+      onPinned()
+    } catch {
+      toast.error('Failed to create item')
+    }
+  }
+
+  const busy = pinItem.isPending || createItem.isPending
+
   return (
     <div className="bg-kraft-50 border-t border-kraft-200 rounded-t-2xl p-4 space-y-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-kraft-700">
           {pendingBbox ? 'Pin item to selection' : 'Pin item to photo'}
@@ -133,52 +151,109 @@ function PinItemSheet({
         </button>
       </div>
 
-      <input
-        autoFocus
-        className="input text-sm"
-        placeholder="Search inventory…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-
-      <div className="max-h-48 overflow-y-auto space-y-1">
-        {items.length === 0 && (
-          <p className="text-xs text-kraft-400 text-center py-4">No items found</p>
-        )}
-        {items.map((item) => {
-          const alreadyPinned = existingItemIds.has(item.id)
-          return (
-            <button
-              key={item.id}
-              disabled={alreadyPinned || pinItem.isPending}
-              onClick={() => handlePin(item.id)}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors',
-                alreadyPinned
-                  ? 'opacity-40 cursor-not-allowed bg-kraft-100'
-                  : 'hover:bg-kraft-100 active:bg-kraft-200'
-              )}
-            >
-              <div className="w-8 h-8 rounded-lg bg-kraft-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                {item.primary_photo_url ? (
-                  <img src={item.primary_photo_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <Tag className="w-4 h-4 text-kraft-400" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-kraft-700 truncate">{item.name}</p>
-                {item.category && (
-                  <p className="text-xs text-kraft-400">{item.category}</p>
-                )}
-              </div>
-              {alreadyPinned && (
-                <span className="text-[10px] text-accent-sage font-semibold">Pinned</span>
-              )}
-            </button>
-          )
-        })}
+      {/* Tab toggle */}
+      <div className="flex gap-1 bg-kraft-200 rounded-xl p-1">
+        <button
+          onClick={() => setTab('search')}
+          className={cn(
+            'flex-1 text-xs font-medium py-1.5 rounded-lg transition-colors',
+            tab === 'search' ? 'bg-white text-kraft-700 shadow-sm' : 'text-kraft-500'
+          )}
+        >
+          Search inventory
+        </button>
+        <button
+          onClick={() => setTab('create')}
+          className={cn(
+            'flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-lg transition-colors',
+            tab === 'create' ? 'bg-white text-kraft-700 shadow-sm' : 'text-kraft-500'
+          )}
+        >
+          <PackagePlus className="w-3.5 h-3.5" />
+          Quick create
+        </button>
       </div>
+
+      {tab === 'search' ? (
+        <>
+          <input
+            autoFocus
+            className="input text-sm"
+            placeholder="Search inventory…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {items.length === 0 && (
+              <p className="text-xs text-kraft-400 text-center py-4">No items found</p>
+            )}
+            {items.map((item) => {
+              const alreadyPinned = existingItemIds.has(item.id)
+              return (
+                <button
+                  key={item.id}
+                  disabled={alreadyPinned || busy}
+                  onClick={() => handlePin(item.id)}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors',
+                    alreadyPinned
+                      ? 'opacity-40 cursor-not-allowed bg-kraft-100'
+                      : 'hover:bg-kraft-100 active:bg-kraft-200'
+                  )}
+                >
+                  <div className="w-8 h-8 rounded-lg bg-kraft-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                    {item.primary_photo_url ? (
+                      <img src={withAuthToken(item.primary_photo_url) ?? ''} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Tag className="w-4 h-4 text-kraft-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-kraft-700 truncate">{item.name}</p>
+                    {item.category && <p className="text-xs text-kraft-400">{item.category}</p>}
+                  </div>
+                  {alreadyPinned && (
+                    <span className="text-[10px] text-accent-sage font-semibold">Pinned</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      ) : (
+        <div className="space-y-2.5">
+          <div>
+            <label className="text-xs text-kraft-500 font-medium">Item name *</label>
+            <input
+              autoFocus
+              className="input mt-1 text-sm"
+              placeholder="e.g. Desk lamp"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateAndPin()}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-kraft-500 font-medium">Category</label>
+            <input
+              className="input mt-1 text-sm"
+              placeholder="e.g. Furniture"
+              value={newCat}
+              onChange={(e) => setNewCat(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateAndPin()}
+            />
+          </div>
+          <Button
+            variant="primary"
+            className="w-full"
+            leftIcon={<PackagePlus className="w-4 h-4" />}
+            onClick={handleCreateAndPin}
+            loading={busy}
+          >
+            Create & pin
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
@@ -280,7 +355,7 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
 
   const { data: detail, isLoading } = usePhotoDetail(siteId, photo?.id ?? null)
 
-  const imageUrl = photo?.url ?? photo?.original_url ?? null
+  const imageUrl = withAuthToken(photo?.url ?? photo?.original_url ?? null)
 
   const existingItemIds = new Set((detail?.pins ?? []).map((p) => p.item_id))
 

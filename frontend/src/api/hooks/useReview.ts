@@ -22,7 +22,10 @@ export function useReviewQueue(siteId: string | null) {
   })
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export function useReviewQueueCount(siteId: string | null) {
+  const isValid = !!siteId && UUID_RE.test(siteId)
   return useQuery({
     queryKey: reviewKeys.count(siteId ?? ''),
     queryFn: async () => {
@@ -31,7 +34,7 @@ export function useReviewQueueCount(siteId: string | null) {
       )
       return data
     },
-    enabled: !!siteId,
+    enabled: isValid,
     refetchInterval: 30_000,
   })
 }

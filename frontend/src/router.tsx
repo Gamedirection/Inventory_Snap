@@ -12,10 +12,10 @@ import { LoginPage }       from '@/pages/auth/LoginPage'
 import { SitesPage }       from '@/pages/sites/SitesPage'
 import { SiteDetailPage }  from '@/pages/sites/SiteDetailPage'
 import { CameraPage }      from '@/pages/camera/CameraPage'
-import { ReviewPage }      from '@/pages/review/ReviewPage'
 import { InventoryPage }   from '@/pages/inventory/InventoryPage'
 import { ItemDetailPage }  from '@/pages/inventory/ItemDetailPage'
 import { MapPage }         from '@/pages/map/MapPage'
+import { SettingsPage }    from '@/pages/settings/SettingsPage'
 
 // ── Auth guard helper ─────────────────────────────────────────────────────────
 function requireAuth() {

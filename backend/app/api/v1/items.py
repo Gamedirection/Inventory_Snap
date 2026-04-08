@@ -25,8 +25,7 @@ from app.schemas.item import (
     PaginatedItems,
 )
 from app.schemas.movement import MovementOut
-from app.services.photo_service import get_presigned_url
-from app.config import settings
+from app.api.v1.photos import _photo_url
 
 router = APIRouter(prefix="/sites/{site_id}/items", tags=["items"])
 
@@ -44,16 +43,11 @@ async def _enrich_item(item: Item, db: AsyncSession) -> ItemOut:
         from app.db.models.photo import Photo
         photo_result = await db.execute(select(Photo).where(Photo.id == item.primary_photo_id))
         photo = photo_result.scalar_one_or_none()
-        if photo:
+        if photo and (photo.original_object_key or photo.thumbnail_object_key):
             if photo.thumbnail_object_key:
-                out.primary_photo_url = get_presigned_url(
-                    settings.minio_bucket_thumbnails, photo.thumbnail_object_key
-                )
-            elif photo.original_object_key:
-                # Thumbnail not yet generated — fall back to original
-                out.primary_photo_url = get_presigned_url(
-                    settings.minio_bucket_photos, photo.original_object_key
-                )
+                out.primary_photo_url = f"/api/v1/sites/{photo.site_id}/photos/{photo.id}/thumbnail"
+            else:
+                out.primary_photo_url = _photo_url(photo.site_id, photo.id)
 
     # Location path
     if item.location_id:
@@ -498,6 +492,54 @@ async def get_item_movements(
         out_list.append(out)
 
     return out_list
+
+
+@router.get("/{item_id}/photos")
+async def get_item_photos(
+    site_id: str,
+    item_id: str,
+    db: DB,
+    _auth: RequireViewer,
+):
+    """Return all photos linked to this item via item_photos junction."""
+    from app.db.models.photo import Photo
+    from app.api.v1.photos import _photo_url
+
+    item_result = await db.execute(
+        select(Item).where(
+            Item.id == item_id,
+            Item.site_id == site_id,
+            Item.deleted_at.is_(None),
+        )
+    )
+    if not item_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    rows = await db.execute(
+        select(Photo, ItemPhoto)
+        .join(ItemPhoto, ItemPhoto.photo_id == Photo.id)
+        .where(
+            ItemPhoto.item_id == item_id,
+            Photo.deleted_at.is_(None),
+        )
+        .order_by(ItemPhoto.is_primary.desc(), Photo.created_at.desc())
+    )
+
+    result = []
+    for photo, item_photo in rows.all():
+        result.append({
+            "photo_id": photo.id,
+            "url": _photo_url(photo.site_id, photo.id),
+            "thumbnail_url": (
+                f"/api/v1/sites/{photo.site_id}/photos/{photo.id}/thumbnail"
+                if photo.thumbnail_object_key
+                else _photo_url(photo.site_id, photo.id)
+            ),
+            "is_primary": item_photo.is_primary,
+            "annotation_bbox": item_photo.annotation_bbox,
+        })
+
+    return result
 
 
 @router.post("/bulk", status_code=status.HTTP_200_OK)

@@ -20,14 +20,17 @@ export function useSites() {
   })
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export function useSite(siteId: string | null) {
+  const isValid = !!siteId && UUID_RE.test(siteId)
   return useQuery({
     queryKey: siteKeys.detail(siteId ?? ''),
     queryFn: async () => {
       const { data } = await apiClient.get<SiteOut>(`/api/v1/sites/${siteId}`)
       return data
     },
-    enabled: !!siteId,
+    enabled: isValid,
   })
 }
 

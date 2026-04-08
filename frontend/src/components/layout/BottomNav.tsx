@@ -18,15 +18,17 @@ export function BottomNav() {
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
 
-  const siteBase = activeSiteId ? `/sites/${activeSiteId}` : '/sites'
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const validSiteId = activeSiteId && UUID_RE.test(activeSiteId) ? activeSiteId : null
+  const siteBase = validSiteId ? `/sites/${validSiteId}` : null
 
   const navItems: NavItem[] = [
     { label: 'Sites',      icon: Building2,      to: '/sites' },
-    { label: 'Map',        icon: Map,            to: `${siteBase}/map` },
-    { label: 'Camera',     icon: Camera,         to: `${siteBase}/camera` },
-    { label: 'Review',     icon: ClipboardCheck, to: `${siteBase}/review`,
+    { label: 'Map',        icon: Map,            to: siteBase ? `${siteBase}/map`       : '/sites' },
+    { label: 'Camera',     icon: Camera,         to: siteBase ? `${siteBase}/camera`    : '/sites' },
+    { label: 'Review',     icon: ClipboardCheck, to: siteBase ? `${siteBase}/review`    : '/sites',
       badge: countData?.pending_count ?? 0 },
-    { label: 'Inventory',  icon: Package,        to: `${siteBase}/inventory` },
+    { label: 'Inventory',  icon: Package,        to: siteBase ? `${siteBase}/inventory` : '/sites' },
   ]
 
   const isActive = (to: string) => currentPath.startsWith(to) && to !== '/sites'

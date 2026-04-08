@@ -189,6 +189,21 @@ export function usePinItem(siteId: string) {
   })
 }
 
+export function useReprocessPhoto(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (photoId: string) => {
+      const { data } = await apiClient.post(
+        `/api/v1/sites/${siteId}/photos/${photoId}/reprocess`
+      )
+      return data
+    },
+    onSuccess: (_data, photoId) => {
+      qc.invalidateQueries({ queryKey: photoKeys.detail(siteId, photoId) })
+    },
+  })
+}
+
 export function useUnpinItem(siteId: string) {
   const qc = useQueryClient()
   return useMutation({

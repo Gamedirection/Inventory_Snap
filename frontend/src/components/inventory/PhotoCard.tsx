@@ -1,5 +1,6 @@
 import { MapPin, Tag } from 'lucide-react'
 import type { PhotoOut } from '@/lib/types'
+import { withAuthToken } from '@/lib/utils'
 
 interface PhotoCardProps {
   photo: PhotoOut
@@ -7,7 +8,7 @@ interface PhotoCardProps {
 }
 
 export function PhotoCard({ photo, onClick }: PhotoCardProps) {
-  const thumbUrl = photo.thumbnail_url ?? photo.url ?? photo.original_url
+  const thumbUrl = withAuthToken(photo.thumbnail_url ?? photo.url ?? photo.original_url)
 
   return (
     <button

@@ -2,15 +2,23 @@ import { useNavigate } from '@tanstack/react-router'
 import { CheckCircle2, MapPin, Package } from 'lucide-react'
 import type { ItemOut } from '@/lib/types'
 import { Badge } from '@/components/ui/Badge'
-import { MINIO_PUBLIC_URL } from '@/lib/constants'
-import { cn } from '@/lib/utils'
+import { cn, withAuthToken } from '@/lib/utils'
 
 const conditionColors: Record<string, 'sage' | 'kraft' | 'rust'> = {
+  new:       'sage',
   excellent: 'sage',
   good:      'sage',
   fair:      'kraft',
   poor:      'rust',
+  broken:    'rust',
+  in_repair: 'kraft',
+  lost:      'rust',
+  misplaced: 'kraft',
+  shared:    'kraft',
+  stolen:    'rust',
+  archived:  'kraft',
   damaged:   'rust',
+  unknown:   'kraft',
 }
 
 interface ItemCardProps {
@@ -23,11 +31,7 @@ interface ItemCardProps {
 export function ItemCard({ item, siteId, selected, onSelect }: ItemCardProps) {
   const navigate = useNavigate()
   const isVerified = (item.verification_count ?? 0) >= 2
-  const thumbUrl = item.primary_photo_url
-    ? item.primary_photo_url.startsWith('http')
-      ? item.primary_photo_url
-      : `${MINIO_PUBLIC_URL}${item.primary_photo_url}`
-    : null
+  const thumbUrl = withAuthToken(item.primary_photo_url)
 
   const handleClick = () => {
     if (onSelect) {

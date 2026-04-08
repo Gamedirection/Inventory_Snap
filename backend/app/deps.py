@@ -17,13 +17,21 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
-    if not credentials:
+    # Accept token via Authorization header OR ?token= query param (needed for <img> src)
+    raw_token: str | None = None
+    if credentials:
+        raw_token = credentials.credentials
+    elif (qp_token := request.query_params.get("token")):
+        raw_token = qp_token
+
+    if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
-        payload = decode_token(credentials.credentials)
+        payload = decode_token(raw_token)
         if payload.get("type") != "access":
             raise JWTError("Not an access token")
         user_id: str = payload["sub"]

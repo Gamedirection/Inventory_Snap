@@ -4,7 +4,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated
 
+import mimetypes
+
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +25,7 @@ from app.schemas.photo import (
     PhotoUpdate,
     PhotoUploadResponse,
 )
-from app.services.photo_service import get_presigned_url, upload_to_minio
+from app.services.photo_service import download_from_minio, upload_to_minio
 
 router = APIRouter(prefix="/sites/{site_id}/photos", tags=["photos"])
 
@@ -35,17 +38,20 @@ _ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/t
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _photo_url(site_id: str, photo_id: str) -> str:
+    """API-routed URL — works from any device, no presigned URL needed."""
+    return f"/api/v1/sites/{site_id}/photos/{photo_id}/image"
+
+
 def _enrich_photo(photo: Photo) -> PhotoOut:
     out = PhotoOut.model_validate(photo)
     if photo.original_object_key:
-        presigned = get_presigned_url(settings.minio_bucket_photos, photo.original_object_key)
-        out.url = presigned
-        out.original_url = presigned
+        url = _photo_url(photo.site_id, photo.id)
+        out.url = url
+        out.original_url = url
+        out.thumbnail_url = url  # thumbnail task may not have run yet
     if photo.thumbnail_object_key:
-        out.thumbnail_url = get_presigned_url(settings.minio_bucket_thumbnails, photo.thumbnail_object_key)
-    elif photo.original_object_key:
-        # Thumbnail not yet generated — use original so images still appear
-        out.thumbnail_url = out.url
+        out.thumbnail_url = f"/api/v1/sites/{photo.site_id}/photos/{photo.id}/thumbnail"
     return out
 
 
@@ -317,6 +323,70 @@ async def reprocess_photo(
     await db.commit()
 
     return PhotoUploadResponse(photo_id=photo.id, ai_status=photo.ai_status)
+
+
+# ── Image proxy ──────────────────────────────────────────────────────────────
+
+@router.get("/{photo_id}/image")
+async def stream_photo(
+    site_id: str,
+    photo_id: str,
+    db: DB,
+    _auth: RequireViewer,
+):
+    """Stream the original photo bytes from MinIO — works from any device."""
+    result = await db.execute(
+        select(Photo).where(
+            Photo.id == photo_id,
+            Photo.site_id == site_id,
+            Photo.deleted_at.is_(None),
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if not photo or not photo.original_object_key:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    data = download_from_minio(settings.minio_bucket_photos, photo.original_object_key)
+    media_type = photo.mime_type or mimetypes.guess_type(photo.original_object_key)[0] or "image/jpeg"
+    return StreamingResponse(
+        iter([data]),
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+@router.get("/{photo_id}/thumbnail")
+async def stream_thumbnail(
+    site_id: str,
+    photo_id: str,
+    db: DB,
+    _auth: RequireViewer,
+):
+    """Stream the thumbnail (falls back to original if not generated yet)."""
+    result = await db.execute(
+        select(Photo).where(
+            Photo.id == photo_id,
+            Photo.site_id == site_id,
+            Photo.deleted_at.is_(None),
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    if photo.thumbnail_object_key:
+        data = download_from_minio(settings.minio_bucket_thumbnails, photo.thumbnail_object_key)
+    elif photo.original_object_key:
+        data = download_from_minio(settings.minio_bucket_photos, photo.original_object_key)
+    else:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    media_type = photo.mime_type or "image/jpeg"
+    return StreamingResponse(
+        iter([data]),
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 # ── Pins (item ↔ photo linking) ───────────────────────────────────────────────

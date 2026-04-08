@@ -32,3 +32,22 @@ export function generateTempId(): string {
 export function blobToUrl(blob: Blob): string {
   return URL.createObjectURL(blob)
 }
+
+/**
+ * Append the JWT access token to API image paths so <img src> requests pass auth.
+ * Non-API URLs (external http/blob) are returned unchanged.
+ */
+export function withAuthToken(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (!url.startsWith('/api/')) return url
+  // Read token directly from persisted zustand store (avoids hook rules)
+  try {
+    const raw = localStorage.getItem('inventory-snap-auth')
+    const token = raw ? (JSON.parse(raw) as { state?: { accessToken?: string } }).state?.accessToken : null
+    if (!token) return url
+    const sep = url.includes('?') ? '&' : '?'
+    return `${url}${sep}token=${encodeURIComponent(token)}`
+  } catch {
+    return url
+  }
+}

@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import {
   QrCode, MapPin, CheckCircle2, Package,
-  DollarSign, Calendar, Hash, Tag, ChevronLeft, ChevronRight, Trash2
+  DollarSign, Calendar, Hash, Tag, ChevronLeft, ChevronRight, Trash2, Pencil
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { QRCodeSVG } from 'qrcode.react'
@@ -12,13 +12,15 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { MovementTimeline } from '@/components/inventory/MovementTimeline'
-import { useDeleteItem, useItem, useItemMovements } from '@/api/hooks/useItems'
-import { MINIO_PUBLIC_URL } from '@/lib/constants'
-import { formatDate, cn } from '@/lib/utils'
+import { ItemEditModal } from '@/components/inventory/ItemEditModal'
+import { useDeleteItem, useItem, useItemMovements, useItemPhotos } from '@/api/hooks/useItems'
+import { formatDate, cn, withAuthToken } from '@/lib/utils'
 
 const conditionVariant: Record<string, 'sage' | 'kraft' | 'rust'> = {
-  excellent: 'sage', good: 'sage', new: 'sage', fair: 'kraft',
-  poor: 'rust', damaged: 'rust', unknown: 'kraft',
+  new: 'sage', excellent: 'sage', good: 'sage', fair: 'kraft',
+  poor: 'rust', broken: 'rust', in_repair: 'kraft', lost: 'rust',
+  misplaced: 'kraft', shared: 'kraft', stolen: 'rust', archived: 'kraft',
+  damaged: 'rust', unknown: 'kraft',
 }
 
 function InfoRow({ label, value, icon: Icon }: {
@@ -87,9 +89,11 @@ export function ItemDetailPage() {
   const { siteId, itemId } = useParams({ strict: false }) as { siteId?: string; itemId?: string }
   const navigate = useNavigate()
   const [qrOpen, setQrOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   const { data: item, isLoading } = useItem(siteId ?? null, itemId ?? null)
   const { data: movements = [] } = useItemMovements(siteId ?? null, itemId ?? null)
+  const { data: linkedPhotos = [] } = useItemPhotos(siteId ?? null, itemId ?? null)
   const deleteItem = useDeleteItem(siteId ?? '', itemId ?? '')
 
   if (isLoading) {
@@ -113,11 +117,12 @@ export function ItemDetailPage() {
 
   const isVerified = (item.verification_count ?? 0) >= 2
 
-  const photoUrls: string[] = item.primary_photo_url
-    ? [item.primary_photo_url.startsWith('http')
-        ? item.primary_photo_url
-        : `${MINIO_PUBLIC_URL}${item.primary_photo_url}`]
-    : []
+  // Use all linked photos if available, otherwise fall back to primary
+  const photoUrls: string[] = (
+    linkedPhotos.length > 0
+      ? linkedPhotos.map((p) => p.url)
+      : item.primary_photo_url ? [item.primary_photo_url] : []
+  ).map((u) => withAuthToken(u) ?? u)
 
   const serialDisplay = item.serial_numbers?.length ? item.serial_numbers.join(', ') : null
   const priceDisplay = item.purchase_price_cents != null
@@ -275,18 +280,39 @@ export function ItemDetailPage() {
         </div>
 
         <div className="card">
-          <p className="section-title">Danger zone</p>
-          <Button
-            type="button"
-            variant="rust"
-            leftIcon={<Trash2 className="w-4 h-4" />}
-            onClick={handleDeleteItem}
-            loading={deleteItem.isPending}
-          >
-            Delete Item
-          </Button>
+          <p className="section-title">Actions</p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="flex-1 bg-[#c8a97e] hover:bg-[#b8976a] text-white border-0"
+            >
+              <Pencil className="w-4 h-4 mr-1.5 inline-block" />
+              Edit
+            </Button>
+            <Button
+              type="button"
+              variant="rust"
+              leftIcon={<Trash2 className="w-4 h-4" />}
+              onClick={handleDeleteItem}
+              loading={deleteItem.isPending}
+              className="flex-1"
+            >
+              Delete
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {item && (
+        <ItemEditModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          siteId={siteId!}
+          item={item}
+        />
+      )}
 
       {/* QR Modal */}
       <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="Item QR Code" size="sm">
