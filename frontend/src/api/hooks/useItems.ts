@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import type { ItemOut, ItemMovement, PaginatedResponse, ItemFilters } from '@/lib/types'
+import { siteKeys } from './useSites'
 
 export const itemKeys = {
   all: (siteId: string) => ['items', siteId] as const,
@@ -50,7 +51,10 @@ export function useCreateItem(siteId: string) {
       )
       return data
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: itemKeys.all(siteId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: itemKeys.all(siteId) })
+      qc.invalidateQueries({ queryKey: siteKeys.all })
+    },
   })
 }
 
@@ -121,6 +125,7 @@ export function useDeleteItem(siteId: string, itemId: string) {
       qc.invalidateQueries({ queryKey: itemKeys.all(siteId) })
       qc.invalidateQueries({ queryKey: itemKeys.detail(siteId, itemId) })
       qc.invalidateQueries({ queryKey: itemKeys.movements(siteId, itemId) })
+      qc.invalidateQueries({ queryKey: siteKeys.all })
     },
   })
 }

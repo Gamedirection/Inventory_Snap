@@ -28,6 +28,8 @@ export interface SiteOut {
   item_count: number
   member_count: number
   created_at: string
+  icon_url: string | null
+  icon_preset: string | null
 }
 
 export interface SiteMemberOut {

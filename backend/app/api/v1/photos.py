@@ -6,7 +6,7 @@ from typing import Annotated
 
 import mimetypes
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -331,6 +331,7 @@ async def reprocess_photo(
     photo_id: str,
     db: DB,
     _auth: RequireAdmin,
+    exclude_labels: list[str] = Body(default=[], embed=True),
 ):
     result = await db.execute(
         select(Photo).where(
@@ -348,7 +349,7 @@ async def reprocess_photo(
     photo.ai_completed_at = None
 
     from app.workers.tasks.ai_processing import process_photo
-    task = process_photo.delay(photo.id)
+    task = process_photo.delay(photo.id, exclude_labels=exclude_labels or [])
     photo.celery_task_id = task.id
     await db.commit()
 

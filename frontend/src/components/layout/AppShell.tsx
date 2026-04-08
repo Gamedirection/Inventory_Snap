@@ -32,7 +32,9 @@ export function AppShell({
       />
       <OfflineBanner />
       <main className="flex-1 overflow-y-auto overscroll-contain pb-20">
-        {children}
+        <div className="lg:max-w-[50%] lg:mx-auto">
+          {children}
+        </div>
       </main>
       <BottomNav />
     </div>

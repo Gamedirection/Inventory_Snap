@@ -28,7 +28,7 @@ export function PageHeader({
   return (
     <header className="sticky top-0 z-30 bg-kraft-50/95 backdrop-blur-sm
                        border-b border-kraft-200 safe-top">
-      <div className="flex items-center gap-2 px-4 h-14">
+      <div className="flex items-center gap-2 px-4 h-14 lg:max-w-[50%] lg:mx-auto">
         {isNested ? (
           <button
             onClick={() => navigate({ to: '..' })}

@@ -6,6 +6,8 @@ import type { ReviewQueueItem, ProposalOut } from '@/lib/types'
 import { useApproveProposal, useRejectProposal } from '@/api/hooks/useReview'
 import { useReprocessPhoto } from '@/api/hooks/usePhotos'
 import { Button } from '@/components/ui/Button'
+import { CategoryCombobox } from '@/components/inventory/CategoryCombobox'
+import { useCameraStore } from '@/store/cameraStore'
 import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
@@ -47,11 +49,12 @@ const CONDITION_LABELS: Record<string, string> = {
 
 interface EditSheetProps {
   proposal: ProposalOut
+  siteId: string
   onClose: () => void
   onApprove: (overrides: Record<string, unknown>) => Promise<void>
 }
 
-function ProposalEditSheet({ proposal, onClose, onApprove }: EditSheetProps) {
+function ProposalEditSheet({ proposal, siteId, onClose, onApprove }: EditSheetProps) {
   const pf = proposal.proposed_fields ?? {}
   const [name, setName]         = useState(pf.name ?? proposal.ai_label ?? '')
   const [category, setCategory] = useState(pf.category ?? proposal.ai_category ?? '')
@@ -106,7 +109,9 @@ function ProposalEditSheet({ proposal, onClose, onApprove }: EditSheetProps) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-kraft-500 font-medium">Category</label>
-              <input className="input mt-1 text-sm" value={category} onChange={(e) => setCategory(e.target.value)} />
+              <div className="mt-1">
+                <CategoryCombobox siteId={siteId} value={category} onChange={setCategory} />
+              </div>
             </div>
             <div>
               <label className="text-xs text-kraft-500 font-medium">Condition</label>
@@ -165,6 +170,7 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
   const approve   = useApproveProposal(siteId)
   const reject    = useRejectProposal(siteId)
   const reprocess = useReprocessPhoto(siteId)
+  const { addRescan } = useCameraStore()
 
   const flatCards = flattenQueue(items)
   const current   = flatCards[currentIndex]
@@ -174,14 +180,12 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
     setCurrentIndex((i) => Math.min(i + 1, flatCards.length))
   }, [flatCards.length])
 
-  // Swipe UP → approve + AI rescan the same photo for more items
+  // Swipe RIGHT → approve only, no rescan
   const handleApprove = useCallback(async (overrides?: Record<string, unknown>) => {
     if (!current) return
     try {
       await approve.mutateAsync({ proposalId: current.proposal.id, overrides })
       toast.success(`"${current.proposal.ai_label ?? 'Item'}" added to inventory`)
-      // Rescan so the next reviewer session can catch more items
-      reprocess.mutateAsync(current.photoId).catch(() => {/* silent */})
       advance()
     } catch (err: unknown) {
       const msg =
@@ -189,15 +193,46 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
         (err instanceof Error ? err.message : 'Failed to approve')
       toast.error(msg)
     }
-  }, [current, approve, reprocess, advance])
+  }, [current, approve, advance])
 
-  // Swipe DOWN → skip + rescan (catch anything missed)
+  // Swipe UP → approve + rescan, excluding the just-approved item label
+  const handleApproveAndRescan = useCallback(async () => {
+    if (!current) return
+    const label = current.proposal.ai_label ?? ''
+    try {
+      await approve.mutateAsync({ proposalId: current.proposal.id })
+      toast.success(`"${label || 'Item'}" added — rescanning for more`)
+      addRescan({ photoId: current.photoId, siteId, label: label || 'Photo', aiStatus: 'pending' })
+      reprocess.mutateAsync({
+        photoId: current.photoId,
+        excludeLabels: label ? [label] : [],
+      }).catch(() => {/* silent */})
+      advance()
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        (err instanceof Error ? err.message : 'Failed to approve')
+      toast.error(msg)
+    }
+  }, [current, siteId, approve, reprocess, addRescan, advance])
+
+  // Swipe DOWN → skip + rescan, excluding ALL pending labels from this photo (avoid duplicates)
   const handleSkip = useCallback(async () => {
     if (!current) return
+    const label = current.proposal.ai_label ?? ''
+    // Collect labels of all pending proposals for this photo to exclude from rescan
+    const photoLabels = flatCards
+      .filter((c) => c.photoId === current.photoId)
+      .map((c) => c.proposal.ai_label ?? '')
+      .filter(Boolean)
     try {
       await reject.mutateAsync({ proposalId: current.proposal.id })
-      toast('Skipped — rescanning photo', { icon: '🔄' })
-      reprocess.mutateAsync(current.photoId).catch(() => {/* silent */})
+      toast('Skipped — rescanning for new items', { icon: '🔄' })
+      addRescan({ photoId: current.photoId, siteId, label: label || 'Photo', aiStatus: 'pending' })
+      reprocess.mutateAsync({
+        photoId: current.photoId,
+        excludeLabels: photoLabels,
+      }).catch(() => {/* silent */})
       advance()
     } catch (err: unknown) {
       const msg =
@@ -205,14 +240,14 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
         (err instanceof Error ? err.message : 'Failed to skip')
       toast.error(msg)
     }
-  }, [current, reject, reprocess, advance])
+  }, [current, siteId, flatCards, reject, reprocess, addRescan, advance])
 
   // Swipe LEFT → hard reject, no rescan
   const handleDelete = useCallback(async () => {
     if (!current) return
     try {
       await reject.mutateAsync({ proposalId: current.proposal.id })
-      toast('Deleted', { icon: '🗑' })
+      toast('Rejected', { icon: '🗑' })
       advance()
     } catch (err: unknown) {
       const msg =
@@ -242,7 +277,7 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
       {/* Current card */}
       <div className="relative z-10">
         <SwipeCard
-          onSwipeUp={handleApprove}
+          onSwipeUp={handleApproveAndRescan}
           onSwipeRight={handleApprove}
           onSwipeDown={handleSkip}
           onSwipeLeft={handleDelete}
@@ -284,6 +319,7 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
       {editOpen && (
         <ProposalEditSheet
           proposal={current.proposal}
+          siteId={siteId}
           onClose={() => setEditOpen(false)}
           onApprove={(overrides) => handleApprove(overrides)}
         />

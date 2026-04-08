@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { X, MapPin, Tag, Trash2, Plus, ChevronDown, PackagePlus, Archive } from 'lucide-react'
+import { X, MapPin, Tag, Trash2, Plus, ChevronDown, PackagePlus, Archive, Pencil } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
@@ -14,12 +14,14 @@ import { cn, withAuthToken } from '@/lib/utils'
 
 function PinOverlay({
   pins,
-  onRemove,
+  onPinEdit,
+  editingPinId,
   pendingBbox,
   canEdit,
 }: {
   pins: PhotoPin[]
-  onRemove?: (pinId: string) => void
+  onPinEdit?: (pin: PhotoPin) => void
+  editingPinId?: string | null
   pendingBbox: { x: number; y: number; w: number; h: number } | null
   canEdit: boolean
 }) {
@@ -34,6 +36,9 @@ function PinOverlay({
         const isPointPin = width <= 0.015 && height <= 0.015
         const pointX = (x + width / 2) * 100
         const pointY = (y + height / 2) * 100
+        const isEditing = pin.pin_id === editingPinId
+        const color = isEditing ? '#d97706' : '#4a7c59'
+        const fillColor = isEditing ? 'rgba(217,119,6,0.15)' : 'rgba(74,124,89,0.15)'
         return (
           <g key={pin.pin_id} style={{ pointerEvents: canEdit ? 'all' : 'none' }}>
             {isPointPin ? (
@@ -42,7 +47,7 @@ function PinOverlay({
                   cx={`${pointX}%`}
                   cy={`${pointY}%`}
                   r="7"
-                  fill="#4a7c59"
+                  fill={color}
                   stroke="rgba(255,255,255,0.9)"
                   strokeWidth="2"
                 />
@@ -59,9 +64,10 @@ function PinOverlay({
                 y={`${y * 100}%`}
                 width={`${width * 100}%`}
                 height={`${height * 100}%`}
-                fill="rgba(74,124,89,0.15)"
-                stroke="#4a7c59"
-                strokeWidth="1.5"
+                fill={fillColor}
+                stroke={color}
+                strokeWidth={isEditing ? 2 : 1.5}
+                strokeDasharray={isEditing ? '5 3' : undefined}
                 rx="3"
               />
             )}
@@ -74,15 +80,16 @@ function PinOverlay({
             >
               <div
                 style={{ display: 'flex', alignItems: 'center', gap: 4,
-                         background: '#4a7c59', borderRadius: 4, padding: '2px 6px',
-                         pointerEvents: 'all', cursor: 'pointer', width: 'max-content' }}
-                onClick={() => onRemove?.(pin.pin_id)}
+                         background: color, borderRadius: 4, padding: '2px 6px',
+                         pointerEvents: 'all', cursor: canEdit ? 'pointer' : 'default',
+                         width: 'max-content' }}
+                onClick={(e) => { e.stopPropagation(); canEdit && onPinEdit?.(pin) }}
               >
                 <span style={{ color: 'white', fontSize: 10, fontWeight: 600, lineHeight: 1.3 }}>
                   {pin.item_name}
                 </span>
-                {onRemove && (
-                  <X style={{ width: 10, height: 10, color: 'rgba(255,255,255,0.8)', flexShrink: 0 }} />
+                {canEdit && (
+                  <Pencil style={{ width: 9, height: 9, color: 'rgba(255,255,255,0.8)', flexShrink: 0 }} />
                 )}
               </div>
             </foreignObject>
@@ -323,7 +330,7 @@ function LocationPicker({
       </button>
 
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 w-64 bg-white border border-kraft-200
+        <div className="absolute bottom-full mb-1 left-0 z-50 w-64 bg-white border border-kraft-200
                         rounded-xl shadow-xl overflow-hidden">
           <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
             <button
@@ -374,8 +381,10 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
     x: number; y: number; w: number; h: number
   } | null>(null)
   const [pinSheetOpen, setPinSheetOpen] = useState(false)
+  const [editingPin, setEditingPin] = useState<PhotoPin | null>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   const unpinItem = useUnpinItem(siteId)
+  const pinItem = usePinItem(siteId)
   const updatePhoto = useUpdatePhotoLocation(siteId)
   const deletePhoto = useDeletePhoto(siteId)
 
@@ -397,7 +406,7 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
   }, [])
 
   const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drawMode) return
+    if (!drawMode && !editingPin) return
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
     const pos = getRelativePos(e)
@@ -405,7 +414,7 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
     setDrawing(true)
     setDrawStart(pos)
     setDrawPreview(null)
-  }, [drawMode, getRelativePos])
+  }, [drawMode, editingPin, getRelativePos])
 
   const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drawing || !drawStart) return
@@ -420,7 +429,7 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
     })
   }, [drawing, drawStart, getRelativePos])
 
-  const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+  const handlePointerUp = useCallback(async (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drawing || !drawStart) return
     e.preventDefault()
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
@@ -434,24 +443,36 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
       width: Math.abs(pos.x - drawStart.x),
       height: Math.abs(pos.y - drawStart.y),
     }
+    const finalBbox = bbox.width > 0.02 && bbox.height > 0.02
+      ? bbox
+      : { x: pos.x, y: pos.y, width: 0, height: 0 }
+
     setDrawing(false)
     setDrawStart(null)
     setDrawPreview(null)
-    // Only open sheet if box is meaningfully sized
-    if (bbox.width > 0.02 && bbox.height > 0.02) {
-      setPendingBbox(bbox)
-      setPinSheetOpen(true)
-    } else {
-      // Tap without drawing — pin to the tapped location with a point-style bbox.
-      setPendingBbox({
-        x: pos.x,
-        y: pos.y,
-        width: 0,
-        height: 0,
-      })
-      setPinSheetOpen(true)
+
+    // Repositioning an existing pin: unpin + repin with new bbox
+    if (editingPin && photo) {
+      try {
+        await unpinItem.mutateAsync({ photoId: photo.id, pinId: editingPin.pin_id })
+        await pinItem.mutateAsync({
+          photoId: photo.id,
+          itemId: editingPin.item_id,
+          annotationBbox: finalBbox,
+        })
+        toast.success(`"${editingPin.item_name}" repositioned`)
+      } catch {
+        toast.error('Failed to reposition pin')
+      }
+      setEditingPin(null)
+      setDrawMode(false)
+      return
     }
-  }, [drawing, drawStart, getRelativePos])
+
+    // Normal draw — open PinItemSheet
+    setPendingBbox(finalBbox)
+    setPinSheetOpen(true)
+  }, [drawing, drawStart, getRelativePos, editingPin, photo, unpinItem, pinItem])
 
   const handleUnpin = async (pinId: string) => {
     if (!photo) return
@@ -506,19 +527,35 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
           {canEdit && (
             <button
               onClick={() => {
-                setDrawMode((v) => !v)
-                setPendingBbox(null)
-                setPinSheetOpen(false)
+                if (editingPin) {
+                  setEditingPin(null)
+                  setDrawMode(false)
+                } else {
+                  setDrawMode((v) => !v)
+                  setPendingBbox(null)
+                  setPinSheetOpen(false)
+                }
               }}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors',
-                drawMode
-                  ? 'bg-accent-rust text-white'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
+                editingPin
+                  ? 'bg-amber-500 text-white'
+                  : drawMode
+                    ? 'bg-accent-rust text-white'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
               )}
             >
-              <Plus className="w-3.5 h-3.5" />
-              {drawMode ? 'Cancel draw' : 'Pin item'}
+              {editingPin ? (
+                <>
+                  <X className="w-3.5 h-3.5" />
+                  Cancel edit
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  {drawMode ? 'Cancel draw' : 'Pin item'}
+                </>
+              )}
             </button>
           )}
         </div>
@@ -529,8 +566,8 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
         <div className="relative flex-1 flex items-center justify-center select-none">
           {imageUrl ? (
             <div
-              className={cn('relative inline-block', drawMode && 'cursor-crosshair')}
-              style={{ touchAction: drawMode ? 'none' : 'auto' }}
+              className={cn('relative inline-block', (drawMode || editingPin) && 'cursor-crosshair')}
+              style={{ touchAction: (drawMode || editingPin) ? 'none' : 'auto' }}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
@@ -559,7 +596,12 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
                 <div className="absolute inset-0 pointer-events-none">
                   <PinOverlay
                     pins={detail.pins}
-                    onRemove={canEdit ? handleUnpin : undefined}
+                    onPinEdit={canEdit ? (pin) => {
+                      setEditingPin(pin)
+                      setDrawMode(true)
+                      setPinSheetOpen(false)
+                    } : undefined}
+                    editingPinId={editingPin?.pin_id}
                     pendingBbox={drawPreview}
                     canEdit={canEdit}
                   />
@@ -580,32 +622,34 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
         {/* Bottom info + controls */}
         <div className="flex-shrink-0 bg-black/50 backdrop-blur-sm">
           {/* Location bar */}
-          <div className="flex items-center gap-3 px-4 py-2">
-            {canEdit && (
-              <>
-                <button
-                  onClick={() => void handleArchivePhoto()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-kraft-200 bg-kraft-100 hover:border-kraft-300 text-xs font-medium text-kraft-600 transition-colors"
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                  Archive
-                </button>
-                <button
-                  onClick={() => void handleDeletePhoto()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-accent-rust/30 bg-accent-rust/10 hover:bg-accent-rust/20 text-xs font-medium text-accent-rust transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete
-                </button>
-              </>
-            )}
+          <div className="flex items-center gap-2 px-4 py-2">
             <LocationPicker
               siteId={siteId}
               photoId={photo.id}
               currentLocationId={detail?.location_id ?? photo.location_id}
             />
             {detail?.location_path && (
-              <span className="text-xs text-white/60 truncate">{detail.location_path}</span>
+              <span className="text-xs text-white/60 truncate flex-1 min-w-0">{detail.location_path}</span>
+            )}
+            {canEdit && (
+              <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+                <button
+                  onClick={() => void handleArchivePhoto()}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-white/20
+                             bg-white/10 hover:bg-white/20 text-xs font-medium text-white/80 transition-colors"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  Archive
+                </button>
+                <button
+                  onClick={() => void handleDeletePhoto()}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-accent-rust/40
+                             bg-accent-rust/20 hover:bg-accent-rust/30 text-xs font-medium text-accent-rust transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </div>
             )}
           </div>
 
@@ -641,10 +685,12 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
           )}
 
           {/* Draw mode hint */}
-          {drawMode && !pinSheetOpen && (
+          {(drawMode || editingPin) && !pinSheetOpen && (
             <div className="px-4 pb-3">
               <p className="text-xs text-amber-300 text-center">
-                Draw a box around the item, or tap anywhere to pin without a selection
+                {editingPin
+                  ? `Repositioning "${editingPin.item_name}" — drag to draw a new box, or tap to place a point pin`
+                  : 'Draw a box around the item, or tap anywhere to pin without a selection'}
               </p>
             </div>
           )}

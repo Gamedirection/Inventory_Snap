@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import type { ReviewQueueResponse, ProposalOut } from '@/lib/types'
+import { siteKeys } from './useSites'
 
 export const reviewKeys = {
   queue: (siteId: string) => ['review', siteId, 'queue'] as const,
@@ -71,6 +72,7 @@ export function useApproveProposal(siteId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: reviewKeys.queue(siteId) })
       qc.invalidateQueries({ queryKey: reviewKeys.count(siteId) })
+      qc.invalidateQueries({ queryKey: siteKeys.all })
     },
   })
 }

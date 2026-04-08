@@ -84,6 +84,51 @@ export function useSiteMembers(siteId: string | null) {
   })
 }
 
+export function useSetSiteIconPreset(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (preset: string) => {
+      const { data } = await apiClient.put<SiteOut>(`/api/v1/sites/${siteId}/icon/preset`, { preset })
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: siteKeys.all })
+      qc.invalidateQueries({ queryKey: siteKeys.detail(siteId) })
+    },
+  })
+}
+
+export function useUploadSiteIcon(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      const { data } = await apiClient.put<SiteOut>(`/api/v1/sites/${siteId}/icon`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: siteKeys.all })
+      qc.invalidateQueries({ queryKey: siteKeys.detail(siteId) })
+    },
+  })
+}
+
+export function useDeleteSiteIcon(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient.delete(`/api/v1/sites/${siteId}/icon`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: siteKeys.all })
+      qc.invalidateQueries({ queryKey: siteKeys.detail(siteId) })
+    },
+  })
+}
+
 export function useInviteMember(siteId: string) {
   const qc = useQueryClient()
   return useMutation({

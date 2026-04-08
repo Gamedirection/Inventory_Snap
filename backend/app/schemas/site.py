@@ -38,6 +38,8 @@ class SiteOut(BaseModel):
     role: str | None = None
     item_count: int = 0
     member_count: int = 0
+    icon_url: str | None = None
+    icon_preset: str | None = None
 
     model_config = {"from_attributes": True}
 

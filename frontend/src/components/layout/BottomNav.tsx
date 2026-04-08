@@ -41,7 +41,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-kraft-50 border-t border-kraft-200 safe-bottom">
-      <div className="flex items-center justify-around px-2 py-2">
+      <div className="flex items-center justify-around px-2 py-2 lg:max-w-[50%] lg:mx-auto">
         {navItems.map(({ label, icon: Icon, to, badge }) => {
           const active = isActive(to)
           return (

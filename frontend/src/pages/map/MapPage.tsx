@@ -13,6 +13,8 @@ import {
   MinusCircle,
   Trash2,
   Archive,
+  Search,
+  X,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -36,6 +38,7 @@ import {
   useUploadFloorMapImage,
 } from '@/api/hooks/useLocations'
 import type { ItemOut, LocationOut } from '@/lib/types'
+import { withAuthToken } from '@/lib/utils'
 
 const ARCHIVED_TAG = '__archived__'
 
@@ -198,6 +201,131 @@ async function getImageDimensions(file: File) {
   }
 }
 
+// ── Add item to location sheet ────────────────────────────────────────────────
+
+function AddItemToLocationSheet({
+  siteId,
+  locationName,
+  onAdd,
+  onClose,
+}: {
+  siteId: string
+  locationName: string
+  onAdd: (item: ItemOut) => Promise<void>
+  onClose: () => void
+}) {
+  const [search, setSearch] = useState('')
+  const [adding, setAdding] = useState<string | null>(null)
+  const { data, isLoading } = useItems(siteId, { search, size: 40 })
+  const items = data?.items ?? []
+
+  const handleAdd = async (item: ItemOut) => {
+    setAdding(item.id)
+    try {
+      await onAdd(item)
+    } finally {
+      setAdding(null)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="absolute inset-0 bg-kraft-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-kraft-50 rounded-t-3xl shadow-2xl max-h-[80vh] flex flex-col">
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+          <div className="w-10 h-1 rounded-full bg-kraft-300" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-kraft-200 flex-shrink-0">
+          <h2 className="text-sm font-semibold text-kraft-700">
+            Add item to <span className="text-kraft-500">{locationName}</span>
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-kraft-200 text-kraft-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 py-3 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-kraft-400" />
+            <input
+              className="input pl-9 text-sm"
+              placeholder="Search items…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+          </div>
+        </div>
+
+        {/* Results */}
+        <div className="overflow-y-auto flex-1 px-4 pb-[max(env(safe-area-inset-bottom,0px),16px)]">
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Spinner size="md" />
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-10 text-center">
+              <p className="text-sm text-kraft-500">No items found</p>
+            </div>
+          ) : (
+            <div className="space-y-2 pb-2">
+              {items.map((item) => {
+                const thumbUrl = item.primary_photo_url ? withAuthToken(item.primary_photo_url) : null
+                const isAdding = adding === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={isAdding}
+                    onClick={() => void handleAdd(item)}
+                    className="w-full flex items-center gap-3 rounded-xl border border-kraft-200
+                               bg-white hover:border-kraft-400 hover:bg-kraft-50 transition-colors
+                               p-2.5 text-left disabled:opacity-50"
+                  >
+                    {/* Thumbnail */}
+                    <div className="w-12 h-12 rounded-lg bg-kraft-200 flex-shrink-0 overflow-hidden">
+                      {thumbUrl ? (
+                        <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Archive className="w-5 h-5 text-kraft-400" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-kraft-700 truncate">{item.name}</p>
+                      <p className="text-xs text-kraft-400 truncate mt-0.5">
+                        {[item.category, item.brand].filter(Boolean).join(' · ') || 'No category'}
+                      </p>
+                    </div>
+
+                    {/* Add indicator */}
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0
+                                    ${isAdding ? 'bg-kraft-200' : 'bg-accent-sage/10'}`}>
+                      {isAdding
+                        ? <Spinner size="sm" />
+                        : <Plus className="w-3.5 h-3.5 text-accent-sage" />
+                      }
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Floor plan panel ──────────────────────────────────────────────────────────
+
 function FloorPlanPanel({
   siteId,
   locations,
@@ -216,6 +344,7 @@ function FloorPlanPanel({
   const [movingPinId, setMovingPinId] = useState<string | null>(null)
   const [pendingNewPin, setPendingNewPin] = useState(false)
   const [editItemOpen, setEditItemOpen] = useState(false)
+  const [addItemOpen, setAddItemOpen] = useState(false)
 
   const locationMap = useMemo(
     () => new Map(locations.map((location) => [location.id, location])),
@@ -611,7 +740,7 @@ function FloorPlanPanel({
         </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="card p-4">
+          <div className="card p-0 -mx-4 rounded-none overflow-hidden sm:mx-0 sm:rounded-xl sm:p-4">
             <FloorPlanBoard
               imageUrl={floorMap?.image_url}
               imageWidth={floorMap?.width}
@@ -679,7 +808,20 @@ function FloorPlanPanel({
                 <p className="section-title">Items in {selectedLocation?.name}</p>
                 <p className="text-xs text-kraft-400">Choose one, then tap the plan to place it.</p>
               </div>
-              <Badge variant="kraft">{items.length}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="kraft">{items.length}</Badge>
+                {selectedLocationId && (
+                  <button
+                    type="button"
+                    onClick={() => setAddItemOpen(true)}
+                    className="w-7 h-7 rounded-full bg-kraft-700 text-kraft-50 flex items-center justify-center
+                               hover:bg-kraft-800 transition-colors"
+                    aria-label="Add item to location"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {itemsLoading ? (
@@ -807,6 +949,22 @@ function FloorPlanPanel({
             />
           </div>
         </Modal>
+      )}
+
+      {addItemOpen && selectedLocationId && (
+        <AddItemToLocationSheet
+          siteId={siteId}
+          locationName={selectedLocation?.name ?? 'this location'}
+          onClose={() => setAddItemOpen(false)}
+          onAdd={async (item) => {
+            await patchItem.mutateAsync({
+              itemId: item.id,
+              payload: { location_id: selectedLocationId },
+            })
+            toast.success(`"${item.name}" added to ${selectedLocation?.name ?? 'location'}`)
+            setAddItemOpen(false)
+          }}
+        />
       )}
     </div>
   )

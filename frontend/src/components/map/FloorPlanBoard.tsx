@@ -106,6 +106,7 @@ export function FloorPlanBoard({
   const [stageScale, setStageScale] = useState(1)
   const [stagePosition, setStagePosition] = useState<Vector2d>({ x: 0, y: 0 })
   const pinchStateRef = useRef<{ distance: number; center: Vector2d } | null>(null)
+  const [hoveredPinId, setHoveredPinId] = useState<string | null>(null)
   const image = useImage(imageUrl)
 
   useEffect(() => {
@@ -117,7 +118,7 @@ export function FloorPlanBoard({
     const updateSize = () => {
       setBoardWidth(Math.max(node.clientWidth, 280))
       const nextViewportHeight = Math.round(
-        Math.min(window.innerHeight * 0.58, window.innerWidth < 640 ? 360 : 520)
+        Math.min(window.innerHeight * 0.65, window.innerWidth < 640 ? 420 : 520)
       )
       setViewportHeight(Math.max(nextViewportHeight, 220))
     }
@@ -340,50 +341,91 @@ export function FloorPlanBoard({
                 />
               ) : null}
 
-              {pins.filter((pin) => pin.x !== null && pin.y !== null).map((pin) => {
-                const x = (pin.x ?? 0) * contentWidth
-                const y = (pin.y ?? 0) * contentHeight
-                const isSelected = pin.id === selectedPinId
-                const isMoving = pin.id === movingPinId
-                const fillColor = isMoving ? '#d97706' : (pin.color ?? '#4a7c59')
-                const radius = isMoving ? 13 : isSelected ? 11 : 9
+              {(() => {
+                const visiblePins = pins.filter((pin) => pin.x !== null && pin.y !== null)
+                // Render hovered pin last so it sits on top
+                const sorted = hoveredPinId
+                  ? [...visiblePins.filter((p) => p.id !== hoveredPinId),
+                     ...visiblePins.filter((p) => p.id === hoveredPinId)]
+                  : visiblePins
 
-                return (
-                  <Group
-                    key={pin.id}
-                    x={x}
-                    y={y}
-                    onClick={(e) => {
-                      e.cancelBubble = true
-                      onPinSelect?.(pin.id, pin.itemId)
-                    }}
-                    onTap={(e) => {
-                      e.cancelBubble = true
-                      onPinSelect?.(pin.id, pin.itemId)
-                    }}
-                  >
-                    <Circle
-                      radius={radius}
-                      fill={fillColor}
-                      stroke={isMoving ? '#fff' : isSelected ? '#f7f2e8' : '#fff'}
-                      strokeWidth={isMoving ? 3 : isSelected ? 3 : 2}
-                      shadowColor="rgba(0,0,0,0.25)"
-                      shadowBlur={isMoving ? 10 : 6}
-                      shadowOffsetY={2}
-                      name="pin-circle"
-                    />
-                    <Text
-                      x={14}
-                      y={-8}
-                      text={isMoving ? `Moving: ${pin.label}` : pin.label}
-                      fontSize={11}
-                      padding={5}
-                      fill={isMoving ? '#92400e' : '#2d241b'}
-                      listening={false}
-                    />
-                  </Group>
-                )
-              })}
+                return sorted.map((pin) => {
+                  const x = (pin.x ?? 0) * contentWidth
+                  const y = (pin.y ?? 0) * contentHeight
+                  const isSelected = pin.id === selectedPinId
+                  const isMoving  = pin.id === movingPinId
+                  const isHovered = pin.id === hoveredPinId
+
+                  const fillColor = isMoving ? '#d97706' : (pin.color ?? '#4a7c59')
+                  const radius = isMoving ? 13 : (isSelected || isHovered) ? 12 : 9
+                  const labelText = isMoving ? `Moving: ${pin.label}` : pin.label
+                  const fontSize = 11
+                  const labelPad = 4
+                  // Estimate label rect width: ~6.5px per char + horizontal padding
+                  const labelW = Math.max(labelText.length * 6.5 + labelPad * 2, 32)
+                  const labelH = fontSize + labelPad * 2
+                  const labelX = 14
+                  const labelY = -(labelH / 2)
+                  // Default: 10% white; hover/selected: solid white
+                  const bgOpacity = isHovered || isSelected ? 1 : 0.1
+
+                  return (
+                    <Group
+                      key={pin.id}
+                      x={x}
+                      y={y}
+                      onMouseEnter={() => setHoveredPinId(pin.id)}
+                      onMouseLeave={() => setHoveredPinId(null)}
+                      onClick={(e) => {
+                        e.cancelBubble = true
+                        onPinSelect?.(pin.id, pin.itemId)
+                      }}
+                      onTap={(e) => {
+                        e.cancelBubble = true
+                        onPinSelect?.(pin.id, pin.itemId)
+                      }}
+                    >
+                      <Circle
+                        radius={radius}
+                        fill={fillColor}
+                        stroke={isMoving ? '#fff' : (isSelected || isHovered) ? '#f7f2e8' : '#fff'}
+                        strokeWidth={isMoving ? 3 : (isSelected || isHovered) ? 3 : 2}
+                        shadowColor="rgba(0,0,0,0.35)"
+                        shadowBlur={isMoving ? 10 : isHovered ? 14 : 6}
+                        shadowOffsetY={isHovered ? 3 : 2}
+                        scaleX={isHovered ? 1.18 : 1}
+                        scaleY={isHovered ? 1.18 : 1}
+                        name="pin-circle"
+                      />
+                      {/* Label background */}
+                      <Rect
+                        x={labelX}
+                        y={labelY}
+                        width={labelW}
+                        height={labelH}
+                        fill="white"
+                        opacity={bgOpacity}
+                        cornerRadius={3}
+                        listening={false}
+                      />
+                      <Text
+                        x={labelX}
+                        y={labelY}
+                        width={labelW}
+                        height={labelH}
+                        text={labelText}
+                        fontSize={fontSize}
+                        padding={labelPad}
+                        fill={isMoving ? '#92400e' : (isHovered || isSelected) ? '#1a0f07' : '#2d241b'}
+                        fontStyle={isHovered || isSelected ? 'bold' : 'normal'}
+                        listening={false}
+                        align="left"
+                        verticalAlign="middle"
+                      />
+                    </Group>
+                  )
+                })
+              })()}
             </Group>
           </Layer>
         </Stage>

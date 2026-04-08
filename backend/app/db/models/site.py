@@ -23,6 +23,7 @@ class Site(Base):
     latitude: Mapped[float | None] = mapped_column(Double)
     longitude: Mapped[float | None] = mapped_column(Double)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
+    icon_object_key: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("users.id", ondelete="SET NULL")
     )

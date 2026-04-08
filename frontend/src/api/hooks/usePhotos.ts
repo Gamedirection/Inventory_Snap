@@ -264,13 +264,14 @@ export function useExportJob(siteId: string, jobId: string | null) {
 export function useReprocessPhoto(siteId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (photoId: string) => {
+    mutationFn: async ({ photoId, excludeLabels = [] }: { photoId: string; excludeLabels?: string[] }) => {
       const { data } = await apiClient.post(
-        `/api/v1/sites/${siteId}/photos/${photoId}/reprocess`
+        `/api/v1/sites/${siteId}/photos/${photoId}/reprocess`,
+        { exclude_labels: excludeLabels }
       )
       return data
     },
-    onSuccess: (_data, photoId) => {
+    onSuccess: (_data, { photoId }) => {
       qc.invalidateQueries({ queryKey: photoKeys.detail(siteId, photoId) })
     },
   })

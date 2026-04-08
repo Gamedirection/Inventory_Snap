@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     max_retries=3,
     default_retry_delay=120,
 )
-def process_photo(self: Task, photo_id: str) -> None:
+def process_photo(self: Task, photo_id: str, exclude_labels: list[str] | None = None) -> None:
     """
     Run the AI detection pipeline on a photo:
     1. Load photo from DB, set ai_status=processing
@@ -82,6 +82,14 @@ def process_photo(self: Task, photo_id: str) -> None:
             session.add(photo)
             session.commit()
             raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
+
+        # Filter out any proposals matching excluded labels (case-insensitive)
+        if exclude_labels:
+            excluded_lower = {label.lower() for label in exclude_labels}
+            proposals = [
+                p for p in proposals
+                if (p.object_name or "").lower() not in excluded_lower
+            ]
 
         # Persist proposals
         for proposal in proposals:

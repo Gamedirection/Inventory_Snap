@@ -290,13 +290,26 @@ export function ItemDetailPage() {
 
         {/* Location */}
         {item.location_path && (
-          <div className="card">
+          <button
+            type="button"
+            className="card w-full text-left hover:border-kraft-400 active:bg-kraft-200 transition-colors"
+            onClick={() => {
+              if (!siteId) return
+              const dest = item.location_id
+                ? `/sites/${siteId}/map?view=floorplan&locationId=${item.location_id}`
+                : `/sites/${siteId}/map`
+              navigate({ to: dest as never })
+            }}
+          >
             <p className="section-title">Location</p>
-            <div className="flex items-center gap-2 py-1">
-              <MapPin className="w-4 h-4 text-kraft-400" />
-              <span className="text-sm text-kraft-700">{item.location_path}</span>
+            <div className="flex items-center justify-between gap-2 py-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <MapPin className="w-4 h-4 text-kraft-400 flex-shrink-0" />
+                <span className="text-sm text-kraft-700 truncate">{item.location_path}</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-kraft-300 flex-shrink-0" />
             </div>
-          </div>
+          </button>
         )}
 
         {/* Purchase info */}
@@ -344,31 +357,6 @@ export function ItemDetailPage() {
           </div>
         )}
 
-        {/* Verification status */}
-        <div className="card">
-          <p className="section-title">Verification</p>
-          <div className="flex items-center gap-2">
-            <div className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center',
-              isVerified ? 'bg-accent-sage/15' : 'bg-kraft-200'
-            )}>
-              <CheckCircle2 className={cn(
-                'w-4 h-4',
-                isVerified ? 'text-accent-sage' : 'text-kraft-400'
-              )} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-kraft-700">
-                {isVerified ? 'Verified' : 'Unverified'}
-              </p>
-              <p className="text-xs text-kraft-400">
-                {item.verification_count} verification{item.verification_count !== 1 ? 's' : ''}
-                {!isVerified && ' · needs 2 to verify'}
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div className="card">
           <p className="section-title">Actions</p>
           <div className="flex gap-2">
@@ -402,7 +390,7 @@ export function ItemDetailPage() {
             </Button>
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               className="flex-1"
               onClick={() => void handleArchiveItem()}
               loading={patchItem.isPending}

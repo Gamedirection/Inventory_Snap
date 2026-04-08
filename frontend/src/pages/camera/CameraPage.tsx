@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Upload, Loader2, ScanSearch, Camera, ClipboardCheck, CheckCircle2 } from 'lucide-react'
+import { Upload, Loader2, ScanSearch, Camera, ClipboardCheck, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useParams } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -10,12 +10,61 @@ import { LocationContextBar } from '@/components/camera/LocationContextBar'
 import { DropZone } from '@/components/camera/DropZone'
 import { SwipeDeck } from '@/components/review/SwipeDeck'
 import { Spinner } from '@/components/ui/Spinner'
-import { useCameraStore } from '@/store/cameraStore'
+import { useCameraStore, type RescanQueueItem } from '@/store/cameraStore'
 import { useSiteStore } from '@/store/siteStore'
 import { useAuthStore } from '@/store/authStore'
-import { useUploadPhoto } from '@/api/hooks/usePhotos'
+import { useUploadPhoto, usePhotoAiStatus } from '@/api/hooks/usePhotos'
 import { useReviewQueue, useReviewQueueCount, reviewKeys } from '@/api/hooks/useReview'
 import { cn } from '@/lib/utils'
+
+// ── Rescan progress row ───────────────────────────────────────────────────────
+
+function RescanRow({ item }: { item: RescanQueueItem }) {
+  const { updateRescan, removeRescan } = useCameraStore()
+  const { data: photo } = usePhotoAiStatus(item.siteId, item.photoId)
+
+  useEffect(() => {
+    if (!photo?.ai_status) return
+    if (photo.ai_status === 'completed' || photo.ai_status === 'failed') {
+      // Brief delay so user sees the final state before it disappears
+      const t = setTimeout(() => removeRescan(item.photoId), 2200)
+      return () => clearTimeout(t)
+    }
+    updateRescan(item.photoId, photo.ai_status)
+  }, [photo?.ai_status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const status = photo?.ai_status ?? item.aiStatus
+  const isDone = status === 'completed' || status === 'failed'
+
+  return (
+    <div className={cn(
+      'flex items-center gap-2.5 px-3 py-2 rounded-xl border text-xs transition-all duration-300',
+      isDone && status === 'completed'
+        ? 'bg-accent-sage/10 border-accent-sage/30 text-accent-sage'
+        : isDone
+        ? 'bg-accent-rust/10 border-accent-rust/30 text-accent-rust'
+        : 'bg-amber-50 border-amber-200 text-amber-700'
+    )}>
+      {isDone ? (
+        status === 'completed'
+          ? <ScanSearch className="w-3.5 h-3.5 flex-shrink-0" />
+          : <ScanSearch className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
+      ) : (
+        <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 animate-spin" style={{ animationDuration: '1.4s' }} />
+      )}
+      <span className="flex-1 min-w-0 truncate">
+        {isDone
+          ? status === 'completed'
+            ? `Rescan complete — new items may be in review`
+            : `Rescan failed`
+          : status === 'processing'
+          ? `Rescanning photo…`
+          : `Queued for rescan…`}
+      </span>
+      <span className="text-[10px] opacity-60 truncate max-w-[80px]">{item.label}</span>
+    </div>
+  )
+}
 
 type Tab = 'capture' | 'review'
 
@@ -24,7 +73,7 @@ export function CameraPage() {
   const [tab, setTab] = useState<Tab>('capture')
 
   const { setActiveSite } = useSiteStore()
-  const { activeSiteId, captureQueue, updateQueueItem } = useCameraStore()
+  const { activeSiteId, captureQueue, updateQueueItem, rescanQueue } = useCameraStore()
   const { accessToken } = useAuthStore()
   const upload = useUploadPhoto(siteId ?? '')
 
@@ -163,6 +212,16 @@ export function CameraPage() {
               <p className="text-xs text-kraft-400">{queuePendingCount} queued for upload</p>
             )}
           </section>
+
+          {/* Rescan progress */}
+          {rescanQueue.length > 0 && (
+            <section className="flex flex-col gap-1.5">
+              <p className="section-title">Rescanning</p>
+              {rescanQueue.map((r) => (
+                <RescanRow key={r.photoId} item={r} />
+              ))}
+            </section>
+          )}
 
           {/* Photo queue */}
           {captureQueue.length > 0 && (
