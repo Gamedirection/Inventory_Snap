@@ -9,10 +9,8 @@ interface FlatCard {
   proposal: ProposalOut
   photoUrl: string
   locationName: string | null
-  /** 1-based index of this proposal within its photo */
-  photoIndex: number
-  /** Total proposals in this photo */
-  photoTotal: number
+  photoIndex: number   // 1-based within its photo
+  photoTotal: number   // total proposals in its photo
 }
 
 function flattenQueue(items: ReviewQueueItem[]): FlatCard[] {
@@ -45,7 +43,8 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
     setCurrentIndex((i) => Math.min(i + 1, flatCards.length))
   }, [flatCards.length])
 
-  const handleSwipeUp = useCallback(async () => {
+  // Swipe UP or RIGHT → approve (add to inventory) then advance
+  const handleApprove = useCallback(async () => {
     if (!current) return
     try {
       await approve.mutateAsync({ proposalId: current.proposal.id })
@@ -53,11 +52,11 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
       advance()
     } catch {
       toast.error('Failed to approve — please try again')
-      // Card snaps back automatically (no advance on failure)
     }
   }, [current, approve, advance])
 
-  const handleSwipeDown = useCallback(async () => {
+  // Swipe DOWN → skip without adding, then advance
+  const handleSkip = useCallback(async () => {
     if (!current) return
     try {
       await reject.mutateAsync({ proposalId: current.proposal.id })
@@ -65,6 +64,18 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
       advance()
     } catch {
       toast.error('Failed to skip — please try again')
+    }
+  }, [current, reject, advance])
+
+  // Swipe LEFT → hard reject (delete from queue) then advance
+  const handleDelete = useCallback(async () => {
+    if (!current) return
+    try {
+      await reject.mutateAsync({ proposalId: current.proposal.id })
+      toast('Deleted', { icon: '🗑' })
+      advance()
+    } catch {
+      toast.error('Failed to delete — please try again')
     }
   }, [current, reject, advance])
 
@@ -88,8 +99,10 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
       {/* Current card */}
       <div className="relative z-10">
         <SwipeCard
-          onSwipeUp={handleSwipeUp}
-          onSwipeDown={handleSwipeDown}
+          onSwipeUp={handleApprove}
+          onSwipeRight={handleApprove}
+          onSwipeDown={handleSkip}
+          onSwipeLeft={handleDelete}
           threshold={90}
         >
           <ReviewCard
@@ -117,13 +130,10 @@ export function SwipeDeck({ items, siteId }: SwipeDeckProps) {
           />
         ))}
         {flatCards.length > 9 && (
-          <span className="text-xs text-kraft-400 self-center">
-            +{flatCards.length - 9}
-          </span>
+          <span className="text-xs text-kraft-400 self-center">+{flatCards.length - 9}</span>
         )}
       </div>
 
-      {/* Remaining count */}
       <p className="text-center text-xs text-kraft-400 mt-2">
         {Math.max(flatCards.length - currentIndex, 0)} item{flatCards.length - currentIndex !== 1 ? 's' : ''} remaining
       </p>

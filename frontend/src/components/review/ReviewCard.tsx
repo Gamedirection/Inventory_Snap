@@ -1,6 +1,6 @@
 import type { ProposalOut } from '@/lib/types'
 import { ConfidenceBadge } from '@/components/shared/ConfidenceBadge'
-import { MapPin, ChevronUp, ChevronDown } from 'lucide-react'
+import { MapPin, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ReviewCardProps {
@@ -109,16 +109,26 @@ export function ReviewCard({
 
       {/* Swipe hint */}
       <div className={cn(
-        'flex items-center justify-between px-4 py-2.5 text-xs text-kraft-400',
+        'grid grid-cols-3 gap-1 px-4 py-2.5 text-[10px] text-kraft-400',
         'border-t border-kraft-200'
       )}>
-        <span className="flex items-center gap-1">
-          <ChevronDown className="w-3.5 h-3.5 text-kraft-400" />
-          Swipe down to skip
+        <span className="flex items-center gap-0.5">
+          <ChevronLeft className="w-3 h-3 text-accent-rust" />
+          Delete
         </span>
-        <span className="flex items-center gap-1">
-          Swipe up to approve
-          <ChevronUp className="w-3.5 h-3.5 text-accent-sage" />
+        <span className="flex flex-col items-center gap-0.5">
+          <span className="flex items-center gap-0.5 text-accent-sage">
+            <ChevronUp className="w-3 h-3" />
+            Add / Approve
+          </span>
+          <span className="flex items-center gap-0.5">
+            <ChevronDown className="w-3 h-3" />
+            Skip
+          </span>
+        </span>
+        <span className="flex items-center gap-0.5 justify-end text-accent-sage">
+          Approve
+          <ChevronRight className="w-3 h-3" />
         </span>
       </div>
     </div>
