@@ -165,11 +165,34 @@ export interface PhotoOut {
   id: string
   site_id: string
   location_id: string | null
-  url: string
+  url: string | null
+  original_url: string | null
   thumbnail_url: string | null
   ai_status: PhotoAiStatus
   captured_at: string | null
+  file_size_bytes: number | null
+  mime_type: string | null
+  gps_latitude: number | null
+  gps_longitude: number | null
+  ai_provider: string | null
+  ai_model: string | null
+  created_at: string
   location?: { id: string; name: string; path?: string } | null
+}
+
+export interface PhotoPin {
+  pin_id: string
+  item_id: string
+  item_name: string
+  category: string | null
+  annotation_bbox: { x: number; y: number; width: number; height: number } | null
+  is_primary: boolean
+}
+
+export interface PhotoDetail extends PhotoOut {
+  pins: PhotoPin[]
+  location_name: string | null
+  location_path: string | null
 }
 
 // ── Review / Proposals ────────────────────────────────────────────────────────

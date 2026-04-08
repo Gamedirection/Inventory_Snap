@@ -89,6 +89,7 @@ async def _create_item_from_proposal(
         photo_id=photo.id,
         proposed_item_id=proposal.id,
         is_primary=True,
+        annotation_bbox=proposal.bounding_box,
     )
     item.primary_photo_id = photo.id
     db.add(item_photo)

@@ -13,7 +13,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -141,6 +141,7 @@ class ItemPhoto(Base):
         UUID(as_uuid=False), ForeignKey("proposed_items.id", ondelete="SET NULL")
     )
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    annotation_bbox: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

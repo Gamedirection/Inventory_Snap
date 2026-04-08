@@ -44,10 +44,16 @@ async def _enrich_item(item: Item, db: AsyncSession) -> ItemOut:
         from app.db.models.photo import Photo
         photo_result = await db.execute(select(Photo).where(Photo.id == item.primary_photo_id))
         photo = photo_result.scalar_one_or_none()
-        if photo and photo.thumbnail_object_key:
-            out.primary_photo_url = get_presigned_url(
-                settings.minio_bucket_thumbnails, photo.thumbnail_object_key
-            )
+        if photo:
+            if photo.thumbnail_object_key:
+                out.primary_photo_url = get_presigned_url(
+                    settings.minio_bucket_thumbnails, photo.thumbnail_object_key
+                )
+            elif photo.original_object_key:
+                # Thumbnail not yet generated — fall back to original
+                out.primary_photo_url = get_presigned_url(
+                    settings.minio_bucket_photos, photo.original_object_key
+                )
 
     # Location path
     if item.location_id:

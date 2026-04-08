@@ -9,7 +9,6 @@ class PhotoOut(BaseModel):
     id: str
     site_id: str
     location_id: str | None
-    # Both names: original_url (internal) and url (frontend-friendly alias)
     url: str | None = None
     original_url: str | None = None
     thumbnail_url: str | None = None
@@ -35,3 +34,31 @@ class PhotoUploadResponse(BaseModel):
 class BatchUploadResponse(BaseModel):
     photos: list[PhotoUploadResponse]
     total: int
+
+
+class PhotoUpdate(BaseModel):
+    """Fields the user can update on a photo."""
+    location_id: str | None = None
+
+
+class PhotoPinOut(BaseModel):
+    """An inventory item pinned to a specific location within a photo."""
+    pin_id: str          # item_photos.id
+    item_id: str
+    item_name: str
+    category: str | None
+    annotation_bbox: dict | None  # {x, y, width, height} normalised 0-1
+    is_primary: bool
+
+
+class PhotoPinCreate(BaseModel):
+    item_id: str
+    annotation_bbox: dict | None = None  # {x, y, width, height} optional
+    set_as_primary: bool = False
+
+
+class PhotoDetail(PhotoOut):
+    """Photo with all linked inventory item pins."""
+    pins: list[PhotoPinOut] = []
+    location_name: str | None = None
+    location_path: str | None = None

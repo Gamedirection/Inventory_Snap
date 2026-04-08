@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { PhotoOut, PhotoUploadResponse } from '@/lib/types'
+import type { PhotoOut, PhotoDetail, PhotoUploadResponse } from '@/lib/types'
 
 export const photoKeys = {
   all: (siteId: string) => ['photos', siteId] as const,
@@ -8,6 +8,8 @@ export const photoKeys = {
     ['photos', siteId, 'list', filters] as const,
   detail: (siteId: string, photoId: string) =>
     ['photos', siteId, photoId] as const,
+  detailFull: (siteId: string, photoId: string) =>
+    ['photos', siteId, photoId, 'detail'] as const,
 }
 
 export function usePhotos(siteId: string | null, filters: Record<string, string> = {}) {
@@ -98,5 +100,112 @@ export function useBatchUploadPhotos(siteId: string) {
       return results
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: photoKeys.all(siteId) }),
+  })
+}
+
+// ── Photo gallery (for inventory Photos tab) ────────────────────────────────
+
+export function usePhotoGallery(
+  siteId: string | null,
+  filters: Record<string, string> = {}
+) {
+  return useQuery({
+    queryKey: photoKeys.list(siteId ?? '', filters),
+    queryFn: async () => {
+      const params = new URLSearchParams(filters)
+      const { data } = await apiClient.get<PhotoOut[]>(
+        `/api/v1/sites/${siteId}/photos?${params}&per_page=100`
+      )
+      return data
+    },
+    enabled: !!siteId,
+  })
+}
+
+export function usePhotoDetail(siteId: string | null, photoId: string | null) {
+  return useQuery({
+    queryKey: photoKeys.detailFull(siteId ?? '', photoId ?? ''),
+    queryFn: async () => {
+      const { data } = await apiClient.get<PhotoDetail>(
+        `/api/v1/sites/${siteId}/photos/${photoId}/detail`
+      )
+      return data
+    },
+    enabled: !!siteId && !!photoId,
+  })
+}
+
+export function useUpdatePhotoLocation(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      photoId,
+      locationId,
+    }: {
+      photoId: string
+      locationId: string | null
+    }) => {
+      const { data } = await apiClient.patch<PhotoOut>(
+        `/api/v1/sites/${siteId}/photos/${photoId}`,
+        { location_id: locationId }
+      )
+      return data
+    },
+    onSuccess: (_data, { photoId }) => {
+      qc.invalidateQueries({ queryKey: photoKeys.all(siteId) })
+      qc.invalidateQueries({ queryKey: photoKeys.detailFull(siteId, photoId) })
+    },
+  })
+}
+
+export function usePinItem(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      photoId,
+      itemId,
+      annotationBbox,
+      setAsPrimary,
+    }: {
+      photoId: string
+      itemId: string
+      annotationBbox?: { x: number; y: number; width: number; height: number } | null
+      setAsPrimary?: boolean
+    }) => {
+      const { data } = await apiClient.post<PhotoDetail>(
+        `/api/v1/sites/${siteId}/photos/${photoId}/pins`,
+        {
+          item_id: itemId,
+          annotation_bbox: annotationBbox ?? null,
+          set_as_primary: setAsPrimary ?? false,
+        }
+      )
+      return data
+    },
+    onSuccess: (_data, { photoId }) => {
+      qc.invalidateQueries({ queryKey: photoKeys.detailFull(siteId, photoId) })
+      qc.invalidateQueries({ queryKey: ['items', siteId] })
+    },
+  })
+}
+
+export function useUnpinItem(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      photoId,
+      pinId,
+    }: {
+      photoId: string
+      pinId: string
+    }) => {
+      await apiClient.delete(
+        `/api/v1/sites/${siteId}/photos/${photoId}/pins/${pinId}`
+      )
+    },
+    onSuccess: (_data, { photoId }) => {
+      qc.invalidateQueries({ queryKey: photoKeys.detailFull(siteId, photoId) })
+      qc.invalidateQueries({ queryKey: ['items', siteId] })
+    },
   })
 }

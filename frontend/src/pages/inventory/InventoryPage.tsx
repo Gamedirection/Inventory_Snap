@@ -1,21 +1,24 @@
 import { useState, useCallback, useRef } from 'react'
-import { Plus, SlidersHorizontal, X, Trash2, MoveRight } from 'lucide-react'
+import { Plus, SlidersHorizontal, X, Trash2, MoveRight, Images, List } from 'lucide-react'
 import { useParams } from '@tanstack/react-router'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import toast from 'react-hot-toast'
 import { AppShell } from '@/components/layout/AppShell'
 import { ItemCard } from '@/components/inventory/ItemCard'
+import { PhotoCard } from '@/components/inventory/PhotoCard'
+import { PhotoViewer } from '@/components/inventory/PhotoViewer'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { Spinner } from '@/components/ui/Spinner'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useItems, useCreateItem } from '@/api/hooks/useItems'
+import { usePhotoGallery } from '@/api/hooks/usePhotos'
 import { useLocationFlat } from '@/api/hooks/useLocations'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import type { ItemCondition, ItemFilters } from '@/lib/types'
+import type { ItemCondition, ItemFilters, PhotoOut } from '@/lib/types'
 
 const CONDITIONS: ItemCondition[] = ['excellent', 'good', 'fair', 'poor', 'damaged']
 
@@ -176,8 +179,49 @@ function CreateItemModal({
   )
 }
 
+type Tab = 'items' | 'photos'
+
+function PhotosGrid({ siteId }: { siteId: string }) {
+  const [viewerPhoto, setViewerPhoto] = useState<PhotoOut | null>(null)
+  const { data: photos = [], isLoading } = usePhotoGallery(siteId)
+
+  if (isLoading) {
+    return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+  }
+
+  if (photos.length === 0) {
+    return (
+      <div className="flex flex-col items-center py-16 text-center">
+        <Images className="w-10 h-10 text-kraft-300 mb-3" />
+        <p className="text-sm font-medium text-kraft-600 mb-1">No photos yet</p>
+        <p className="text-xs text-kraft-400">Capture photos to start building your gallery.</p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2 p-4">
+        {photos.map((photo) => (
+          <PhotoCard key={photo.id} photo={photo} onClick={setViewerPhoto} />
+        ))}
+      </div>
+
+      {viewerPhoto && (
+        <PhotoViewer
+          siteId={siteId}
+          photo={viewerPhoto}
+          onClose={() => setViewerPhoto(null)}
+          canEdit
+        />
+      )}
+    </>
+  )
+}
+
 export function InventoryPage() {
   const { siteId } = useParams({ strict: false }) as { siteId?: string }
+  const [tab, setTab] = useState<Tab>('items')
   const [filters, setFilters] = useState<ItemFilters>({ size: 50, page: 1 })
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [createOpen, setCreateOpen] = useState(false)
@@ -213,64 +257,99 @@ export function InventoryPage() {
   return (
     <AppShell>
       <div className="flex flex-col h-full">
-        {/* Fixed filter bar */}
-        <div className="px-4 pt-4 pb-3 border-b border-kraft-200 bg-kraft-50 space-y-3">
-          <SearchBar onSearch={handleSearch} placeholder="Search items…" />
-          <FilterChips filters={filters} onChange={updateFilter} />
-
-          {data && (
-            <p className="text-xs text-kraft-400">
-              {data.total} item{data.total !== 1 ? 's' : ''}
-              {filters.search && ` matching "${filters.search}"`}
-            </p>
-          )}
-        </div>
-
-        {/* Scrollable list */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
-          {isLoading ? (
-            <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-          ) : items.length === 0 ? (
-            <div className="flex flex-col items-center py-16 text-center">
-              <p className="text-sm font-medium text-kraft-600 mb-1">No items found</p>
-              <p className="text-xs text-kraft-400">
-                Try adjusting your filters or capture new photos.
-              </p>
-            </div>
-          ) : (
-            <div
-              style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}
+        {/* Tab switcher */}
+        <div className="px-4 pt-4 pb-0 border-b border-kraft-200 bg-kraft-50">
+          <div className="flex gap-1 bg-kraft-200/50 rounded-xl p-1 mb-3">
+            <button
+              onClick={() => setTab('items')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg
+                          text-sm font-medium transition-all
+                          ${tab === 'items'
+                            ? 'bg-white text-kraft-700 shadow-sm'
+                            : 'text-kraft-500 hover:text-kraft-700'
+                          }`}
             >
-              {rowVirtualizer.getVirtualItems().map((vRow) => {
-                const item = items[vRow.index]
-                return (
-                  <div
-                    key={vRow.key}
-                    style={{
-                      position: 'absolute',
-                      top: vRow.start,
-                      left: 0,
-                      right: 0,
-                      height: vRow.size,
-                      paddingBottom: 8,
-                    }}
-                  >
-                    <ItemCard
-                      item={item}
-                      siteId={siteId!}
-                      selected={selected.has(item.id)}
-                      onSelect={selected.size > 0 ? toggleSelect : undefined}
-                    />
-                  </div>
-                )
-              })}
+              <List className="w-4 h-4" />
+              Items
+              {data && (
+                <span className="text-xs text-kraft-400">({data.total})</span>
+              )}
+            </button>
+            <button
+              onClick={() => setTab('photos')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg
+                          text-sm font-medium transition-all
+                          ${tab === 'photos'
+                            ? 'bg-white text-kraft-700 shadow-sm'
+                            : 'text-kraft-500 hover:text-kraft-700'
+                          }`}
+            >
+              <Images className="w-4 h-4" />
+              Photos
+            </button>
+          </div>
+
+          {/* Items filters (only shown on items tab) */}
+          {tab === 'items' && (
+            <div className="space-y-3 pb-3">
+              <SearchBar onSearch={handleSearch} placeholder="Search items…" />
+              <FilterChips filters={filters} onChange={updateFilter} />
             </div>
           )}
         </div>
+
+        {/* Tab content */}
+        {tab === 'photos' ? (
+          <div className="flex-1 overflow-y-auto">
+            {siteId && <PhotosGrid siteId={siteId} />}
+          </div>
+        ) : (
+          /* Items list */
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
+            {isLoading ? (
+              <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center py-16 text-center">
+                <p className="text-sm font-medium text-kraft-600 mb-1">No items found</p>
+                <p className="text-xs text-kraft-400">
+                  Try adjusting your filters or capture new photos.
+                </p>
+              </div>
+            ) : (
+              <div
+                style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}
+              >
+                {rowVirtualizer.getVirtualItems().map((vRow) => {
+                  const item = items[vRow.index]
+                  return (
+                    <div
+                      key={vRow.key}
+                      style={{
+                        position: 'absolute',
+                        top: vRow.start,
+                        left: 0,
+                        right: 0,
+                        height: vRow.size,
+                        paddingBottom: 8,
+                      }}
+                    >
+                      <ItemCard
+                        item={item}
+                        siteId={siteId!}
+                        selected={selected.has(item.id)}
+                        onSelect={selected.size > 0 ? toggleSelect : undefined}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Multi-select action bar */}
-      {selected.size > 0 && (
+      {selected.size > 0 && tab === 'items' && (
         <div className="fixed bottom-20 left-4 right-4 z-40 bg-kraft-800 text-kraft-50
                         rounded-xl px-4 py-3 flex items-center gap-3 shadow-xl">
           <span className="text-sm font-medium flex-1">
@@ -295,17 +374,19 @@ export function InventoryPage() {
         </div>
       )}
 
-      {/* FAB */}
-      <button
-        onClick={() => setCreateOpen(true)}
-        className="fixed bottom-24 right-4 z-30 w-14 h-14 rounded-full
-                   bg-kraft-700 text-kraft-50 shadow-lg shadow-kraft-800/30
-                   flex items-center justify-center
-                   hover:bg-kraft-800 active:scale-95 transition-all"
-        aria-label="Add item"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
+      {/* FAB — only on items tab */}
+      {tab === 'items' && (
+        <button
+          onClick={() => setCreateOpen(true)}
+          className="fixed bottom-24 right-4 z-30 w-14 h-14 rounded-full
+                     bg-kraft-700 text-kraft-50 shadow-lg shadow-kraft-800/30
+                     flex items-center justify-center
+                     hover:bg-kraft-800 active:scale-95 transition-all"
+          aria-label="Add item"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
 
       {siteId && (
         <CreateItemModal
