@@ -25,17 +25,19 @@ export function CaptureButton({ disabled }: CaptureButtonProps) {
         await Haptics.impact({ style: ImpactStyle.Medium })
       }
 
-      const blob = await capturePhoto()
-      if (!blob) return
+      const result = await capturePhoto()
+      if (!result) return
 
       const item = {
         tempId: generateTempId(),
-        blob,
+        blob: result.blob,
         siteId: activeSiteId,
         locationId: activeLocationId,
-        capturedAt: new Date().toISOString(),
+        capturedAt: result.capturedAt,
+        gpsLatitude: result.gpsLatitude,
+        gpsLongitude: result.gpsLongitude,
         uploadStatus: 'pending' as const,
-        thumbnailUrl: URL.createObjectURL(blob),
+        thumbnailUrl: URL.createObjectURL(result.blob),
       }
 
       addToQueue(item)

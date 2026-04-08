@@ -2,9 +2,12 @@
 export interface UserOut {
   id: string
   email: string
-  full_name: string | null
+  display_name: string | null
+  avatar_url: string | null
   is_active: boolean
+  is_superuser?: boolean
   created_at: string
+  last_login_at?: string | null
 }
 
 export interface TokenResponse {
@@ -176,6 +179,7 @@ export interface PhotoOut {
   gps_longitude: number | null
   ai_provider: string | null
   ai_model: string | null
+  archived?: boolean
   created_at: string
   location?: { id: string; name: string; path?: string } | null
 }

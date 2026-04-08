@@ -13,13 +13,13 @@ export function SiteSelector() {
   const handleSelect = (id: string, name: string) => {
     setActiveSite(id, name)
     setOpen(false)
-    navigate({ to: `/sites/${id}/inventory` })
+    navigate({ to: `/sites/${id}` })
   }
 
   return (
-    <>
+    <div className="relative">
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => setOpen((value) => !value)}
         className="flex items-center gap-1.5 text-kraft-700 font-semibold text-sm
                    hover:text-kraft-800 transition-colors max-w-[180px]"
       >
@@ -28,24 +28,18 @@ export function SiteSelector() {
         <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-kraft-400" />
       </button>
 
-      {/* Bottom sheet */}
       {open && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <>
           <div
-            className="absolute inset-0 bg-kraft-900/40 backdrop-blur-sm"
+            className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="relative bg-kraft-50 rounded-t-3xl shadow-2xl max-h-[75vh] overflow-y-auto pb-[env(safe-area-inset-bottom,16px)]" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 72px)' }}>
-            {/* Handle */}
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-kraft-300" />
-            </div>
-
-            <div className="px-4 py-3 border-b border-kraft-200">
+          <div className="absolute top-full left-0 mt-2 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-kraft-200 bg-kraft-50 shadow-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-kraft-200 bg-kraft-50">
               <h2 className="text-sm font-semibold text-kraft-700">Switch Site</h2>
             </div>
 
-            <ul className="py-2">
+            <ul className="py-2 max-h-80 overflow-y-auto">
               {sites.map((site) => (
                 <li key={site.id}>
                   <button
@@ -71,7 +65,7 @@ export function SiteSelector() {
               ))}
             </ul>
 
-            <div className="px-4 pb-4 pt-2 border-t border-kraft-200">
+            <div className="px-4 pb-4 pt-2 border-t border-kraft-200 bg-kraft-50">
               <button
                 onClick={() => { setOpen(false); navigate({ to: '/sites' }) }}
                 className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl
@@ -83,8 +77,8 @@ export function SiteSelector() {
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
-    </>
+    </div>
   )
 }

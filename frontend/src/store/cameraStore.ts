@@ -7,6 +7,8 @@ export interface CaptureQueueItem {
   locationId: string | null
   siteId: string
   capturedAt: string
+  gpsLatitude?: number | null
+  gpsLongitude?: number | null
   uploadStatus: 'pending' | 'uploading' | 'uploaded' | 'failed'
   thumbnailUrl?: string
   /** Set after successful upload — the real photo ID from the server */

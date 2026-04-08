@@ -18,7 +18,9 @@ export function DropZone() {
             blob: file,
             siteId: activeSiteId,
             locationId: activeLocationId,
-            capturedAt: new Date().toISOString(),
+            capturedAt: file.lastModified
+              ? new Date(file.lastModified).toISOString()
+              : new Date().toISOString(),
             uploadStatus: 'pending',
             thumbnailUrl: URL.createObjectURL(file),
           })

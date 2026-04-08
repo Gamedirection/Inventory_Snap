@@ -13,8 +13,11 @@ import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { MovementTimeline } from '@/components/inventory/MovementTimeline'
 import { ItemEditModal } from '@/components/inventory/ItemEditModal'
-import { useDeleteItem, useItem, useItemMovements, useItemPhotos } from '@/api/hooks/useItems'
+import { PhotoViewer } from '@/components/inventory/PhotoViewer'
+import { useDeleteItem, useItem, useItemMovements, useItemPhotos, usePatchItem } from '@/api/hooks/useItems'
 import { formatDate, cn, withAuthToken } from '@/lib/utils'
+
+const ARCHIVED_TAG = '__archived__'
 
 const conditionVariant: Record<string, 'sage' | 'kraft' | 'rust'> = {
   new: 'sage', excellent: 'sage', good: 'sage', fair: 'kraft',
@@ -40,8 +43,15 @@ function InfoRow({ label, value, icon: Icon }: {
   )
 }
 
-function PhotoGallery({ urls }: { urls: string[] }) {
-  const [idx, setIdx] = useState(0)
+function PhotoGallery({
+  urls,
+  idx,
+  onChange,
+}: {
+  urls: string[]
+  idx: number
+  onChange: (idx: number) => void
+}) {
   if (urls.length === 0) return null
 
   return (
@@ -54,14 +64,14 @@ function PhotoGallery({ urls }: { urls: string[] }) {
       {urls.length > 1 && (
         <>
           <button
-            onClick={() => setIdx((i) => (i - 1 + urls.length) % urls.length)}
+            onClick={() => onChange((idx - 1 + urls.length) % urls.length)}
             className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full
                        bg-kraft-900/60 text-white flex items-center justify-center"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setIdx((i) => (i + 1) % urls.length)}
+            onClick={() => onChange((idx + 1) % urls.length)}
             className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full
                        bg-kraft-900/60 text-white flex items-center justify-center"
           >
@@ -71,7 +81,7 @@ function PhotoGallery({ urls }: { urls: string[] }) {
             {urls.map((_, i) => (
               <div
                 key={i}
-                onClick={() => setIdx(i)}
+                onClick={() => onChange(i)}
                 className={cn(
                   'w-1.5 h-1.5 rounded-full cursor-pointer transition-colors',
                   i === idx ? 'bg-white' : 'bg-white/40'
@@ -90,11 +100,14 @@ export function ItemDetailPage() {
   const navigate = useNavigate()
   const [qrOpen, setQrOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [photoIndex, setPhotoIndex] = useState(0)
+  const [editorOpen, setEditorOpen] = useState(false)
 
   const { data: item, isLoading } = useItem(siteId ?? null, itemId ?? null)
   const { data: movements = [] } = useItemMovements(siteId ?? null, itemId ?? null)
   const { data: linkedPhotos = [] } = useItemPhotos(siteId ?? null, itemId ?? null)
   const deleteItem = useDeleteItem(siteId ?? '', itemId ?? '')
+  const patchItem = usePatchItem(siteId ?? '')
 
   if (isLoading) {
     return (
@@ -118,11 +131,44 @@ export function ItemDetailPage() {
   const isVerified = (item.verification_count ?? 0) >= 2
 
   // Use all linked photos if available, otherwise fall back to primary
-  const photoUrls: string[] = (
-    linkedPhotos.length > 0
-      ? linkedPhotos.map((p) => p.url)
-      : item.primary_photo_url ? [item.primary_photo_url] : []
-  ).map((u) => withAuthToken(u) ?? u)
+  const galleryPhotos = linkedPhotos.length > 0
+    ? linkedPhotos.map((p) => ({
+        id: p.photo_id,
+        site_id: siteId ?? '',
+        location_id: item.location_id,
+        url: p.url,
+        original_url: p.url,
+        thumbnail_url: p.thumbnail_url,
+        ai_status: 'completed' as const,
+        captured_at: null,
+        file_size_bytes: null,
+        mime_type: null,
+        gps_latitude: item.gps_latitude,
+        gps_longitude: item.gps_longitude,
+        ai_provider: null,
+        ai_model: null,
+        created_at: item.created_at,
+      }))
+    : item.primary_photo_url ? [{
+        id: item.primary_photo_id ?? `item-${item.id}-primary`,
+        site_id: siteId ?? '',
+        location_id: item.location_id,
+        url: item.primary_photo_url,
+        original_url: item.primary_photo_url,
+        thumbnail_url: item.primary_photo_url,
+        ai_status: 'completed' as const,
+        captured_at: null,
+        file_size_bytes: null,
+        mime_type: null,
+        gps_latitude: item.gps_latitude,
+        gps_longitude: item.gps_longitude,
+        ai_provider: null,
+        ai_model: null,
+        created_at: item.created_at,
+      }] : []
+
+  const photoUrls = galleryPhotos.map((photo) => withAuthToken(photo.url) ?? photo.url ?? '')
+  const selectedEditorPhoto = galleryPhotos[photoIndex] ?? null
 
   const serialDisplay = item.serial_numbers?.length ? item.serial_numbers.join(', ') : null
   const priceDisplay = item.purchase_price_cents != null
@@ -140,6 +186,31 @@ export function ItemDetailPage() {
     } catch {
       toast.error('Failed to delete item')
     }
+  }
+
+  const handleArchiveItem = async () => {
+    if (!siteId || !item) return
+    const confirmed = window.confirm(`Archive item "${item.name}"? It will be hidden from inventory lists.`)
+    if (!confirmed) return
+    try {
+      const nextTags = Array.from(new Set([...(item.custom_tags ?? []), ARCHIVED_TAG]))
+      await patchItem.mutateAsync({
+        itemId: item.id,
+        payload: { custom_tags: nextTags },
+      })
+      toast.success('Item archived')
+      navigate({ to: `/sites/${siteId}/inventory` })
+    } catch {
+      toast.error('Failed to archive item')
+    }
+  }
+
+  const handlePinToFloorplan = () => {
+    if (!siteId || !item.location_id) {
+      toast.error('Set an item location before pinning it on the floor plan')
+      return
+    }
+    navigate({ to: `/sites/${siteId}/map?view=floorplan&locationId=${item.location_id}&itemId=${item.id}` })
   }
 
   return (
@@ -160,7 +231,7 @@ export function ItemDetailPage() {
 
         {/* Photo gallery */}
         {photoUrls.length > 0 ? (
-          <PhotoGallery urls={photoUrls} />
+          <PhotoGallery urls={photoUrls} idx={photoIndex} onChange={setPhotoIndex} />
         ) : (
           <div className="aspect-video bg-kraft-100 border border-kraft-200 rounded-xl
                           flex items-center justify-center">
@@ -301,6 +372,35 @@ export function ItemDetailPage() {
               Delete
             </Button>
           </div>
+          <div className="flex gap-2 mt-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={handlePinToFloorplan}
+            >
+              Pin to floorplan
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="flex-1"
+              onClick={() => void handleArchiveItem()}
+              loading={patchItem.isPending}
+            >
+              Archive
+            </Button>
+          </div>
+          {selectedEditorPhoto && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full mt-2"
+              onClick={() => setEditorOpen(true)}
+            >
+              Jump to editor
+            </Button>
+          )}
         </div>
       </div>
 
@@ -311,6 +411,15 @@ export function ItemDetailPage() {
           onClose={() => setEditOpen(false)}
           siteId={siteId!}
           item={item}
+        />
+      )}
+
+      {editorOpen && siteId && selectedEditorPhoto && (
+        <PhotoViewer
+          siteId={siteId}
+          photo={selectedEditorPhoto}
+          onClose={() => setEditorOpen(false)}
+          canEdit
         />
       )}
 

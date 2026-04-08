@@ -82,6 +82,13 @@ async def get_me(current_user: CurrentUser):
 
 @router.patch("/me", response_model=UserOut)
 async def update_me(data: UserUpdate, current_user: CurrentUser, db: DB):
+    if data.email is not None:
+        next_email = data.email.lower()
+        if next_email != current_user.email:
+            existing = await get_user_by_email(db, next_email)
+            if existing and existing.id != current_user.id:
+                raise HTTPException(status_code=400, detail="Email already registered")
+            current_user.email = next_email
     if data.display_name is not None:
         current_user.display_name = data.display_name
     if data.avatar_url is not None:

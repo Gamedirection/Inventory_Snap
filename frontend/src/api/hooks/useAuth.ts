@@ -26,18 +26,46 @@ export function useRegister() {
     mutationFn: async ({
       email,
       password,
-      full_name,
+      display_name,
     }: {
       email: string
       password: string
-      full_name?: string
+      display_name?: string
     }) => {
       const { data } = await apiClient.post<UserOut>('/api/v1/auth/register', {
         email,
         password,
-        full_name,
+        display_name,
       })
       return data
+    },
+  })
+}
+
+export function useUpdateMe() {
+  const { setUser } = useAuthStore()
+  return useMutation({
+    mutationFn: async (payload: {
+      email?: string
+      display_name?: string | null
+      avatar_url?: string | null
+    }) => {
+      const { data } = await apiClient.patch<UserOut>('/api/v1/auth/me', payload)
+      return data
+    },
+    onSuccess: (user) => {
+      setUser(user)
+    },
+  })
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: async (payload: {
+      current_password: string
+      new_password: string
+    }) => {
+      await apiClient.post('/api/v1/auth/me/change-password', payload)
     },
   })
 }

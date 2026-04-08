@@ -6,7 +6,7 @@ from typing import Annotated
 
 import mimetypes
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,8 +43,13 @@ def _photo_url(site_id: str, photo_id: str) -> str:
     return f"/api/v1/sites/{site_id}/photos/{photo_id}/image"
 
 
+def _photo_is_archived(photo: Photo) -> bool:
+    return bool((photo.exif_data or {}).get("archived"))
+
+
 def _enrich_photo(photo: Photo) -> PhotoOut:
     out = PhotoOut.model_validate(photo)
+    out.archived = _photo_is_archived(photo)
     if photo.original_object_key:
         url = _photo_url(photo.site_id, photo.id)
         out.url = url
@@ -108,6 +113,9 @@ async def _upload_single(
     current_user,
     db: AsyncSession,
     location_id: str | None = None,
+    captured_at: datetime | None = None,
+    gps_latitude: float | None = None,
+    gps_longitude: float | None = None,
 ) -> Photo:
     data = await file.read()
     if not data:
@@ -125,9 +133,12 @@ async def _upload_single(
         site_id=site_id,
         location_id=location_id,
         original_object_key=object_key,
+        captured_at=captured_at,
         uploaded_by=current_user.id,
         file_size_bytes=len(data),
         mime_type=content_type,
+        gps_latitude=gps_latitude,
+        gps_longitude=gps_longitude,
         ai_status="pending",
     )
     db.add(photo)
@@ -144,9 +155,21 @@ async def upload_photo(
     db: DB,
     current_user: CurrentUser,
     _auth: RequireEditor,
-    location_id: str | None = Query(default=None),
+    location_id: str | None = Form(default=None),
+    captured_at: datetime | None = Form(default=None),
+    gps_latitude: float | None = Form(default=None),
+    gps_longitude: float | None = Form(default=None),
 ):
-    photo = await _upload_single(site_id, file, current_user, db, location_id)
+    photo = await _upload_single(
+        site_id,
+        file,
+        current_user,
+        db,
+        location_id,
+        captured_at,
+        gps_latitude,
+        gps_longitude,
+    )
     await db.commit()
     await db.refresh(photo)
 
@@ -197,6 +220,7 @@ async def list_photos(
     date_to: datetime | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=200),
+    include_archived: bool = Query(default=False),
 ):
     q = select(Photo).where(Photo.site_id == site_id, Photo.deleted_at.is_(None))
     if location_id:
@@ -211,6 +235,8 @@ async def list_photos(
     q = q.order_by(Photo.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(q)
     photos = result.scalars().all()
+    if not include_archived:
+        photos = [photo for photo in photos if not _photo_is_archived(photo)]
     return [_enrich_photo(p) for p in photos]
 
 
@@ -267,6 +293,10 @@ async def update_photo(
             if not loc_res.scalar_one_or_none():
                 raise HTTPException(status_code=400, detail="Location not found in this site")
         photo.location_id = body.location_id or None
+    if body.archived is not None:
+        metadata = dict(photo.exif_data or {})
+        metadata["archived"] = body.archived
+        photo.exif_data = metadata
 
     await db.commit()
     await db.refresh(photo)

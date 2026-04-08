@@ -54,7 +54,9 @@ export function SiteDetailPage() {
     {
       icon: Camera,
       label: 'Camera',
-      description: 'Capture new items',
+      description: reviewCount?.pending_count
+        ? `Capture new items · ${reviewCount.pending_count} pending review`
+        : 'Capture and review items',
       onClick: () => navigate({ to: `/sites/${siteId}/camera` }),
     },
     {
@@ -64,7 +66,7 @@ export function SiteDetailPage() {
         ? `${reviewCount.pending_count} pending`
         : 'All reviewed',
       badge: reviewCount?.pending_count,
-      onClick: () => navigate({ to: `/sites/${siteId}/review` }),
+      onClick: () => navigate({ to: `/sites/${siteId}/camera` }),
     },
     {
       icon: Map,

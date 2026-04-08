@@ -33,6 +33,12 @@ RequireViewer = Annotated[object, Depends(site_role_checker("viewer"))]
 RequireEditor = Annotated[object, Depends(site_role_checker("editor"))]
 RequireAdmin = Annotated[object, Depends(site_role_checker("admin"))]
 
+ARCHIVED_TAG = "__archived__"
+
+
+def _photo_is_archived(photo) -> bool:
+    return bool((photo.exif_data or {}).get("archived"))
+
 
 async def _enrich_item(item: Item, db: AsyncSession) -> ItemOut:
     out = ItemOut.model_validate(item)
@@ -123,6 +129,8 @@ async def _apply_item_pins(
 def _build_fts_query(params: ItemSearchParams, site_id: str):
     """Build the base SQLAlchemy select for item search."""
     q = select(Item).where(Item.site_id == site_id, Item.deleted_at.is_(None))
+    if not params.include_archived:
+        q = q.where(~Item.custom_tags.any(ARCHIVED_TAG))
 
     if params.q:
         fts_expr = text(
@@ -192,6 +200,7 @@ async def search_items(
     size: int | None = Query(default=None, ge=1, le=200),
     per_page: int = Query(default=50, ge=1, le=200),
     updated_since: datetime | None = Query(default=None),
+    include_archived: bool = Query(default=False),
 ):
     # Merge aliases
     effective_q = search or q
@@ -211,6 +220,7 @@ async def search_items(
         page=page,
         per_page=effective_per_page,
         updated_since=updated_since,
+        include_archived=include_archived,
     )
 
     base_q = _build_fts_query(params, site_id)
@@ -527,6 +537,8 @@ async def get_item_photos(
 
     result = []
     for photo, item_photo in rows.all():
+        if _photo_is_archived(photo):
+            continue
         result.append({
             "photo_id": photo.id,
             "url": _photo_url(photo.site_id, photo.id),

@@ -53,6 +53,8 @@ export function CameraPage() {
           blob: item.blob,
           locationId: item.locationId,
           capturedAt: item.capturedAt,
+          gpsLatitude: item.gpsLatitude,
+          gpsLongitude: item.gpsLongitude,
         })
         updateQueueItem(item.tempId, {
           uploadStatus: 'uploaded',

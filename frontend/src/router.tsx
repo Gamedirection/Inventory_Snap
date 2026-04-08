@@ -65,8 +65,11 @@ const cameraRoute = createRoute({
 const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sites/$siteId/review',
-  beforeLoad: requireAuth,
-  component: ReviewPage,
+  beforeLoad: ({ params }) => {
+    requireAuth()
+    throw redirect({ to: '/sites/$siteId/camera', params })
+  },
+  component: () => null,
 })
 
 const inventoryRoute = createRoute({
@@ -90,6 +93,13 @@ const mapRoute = createRoute({
   component: MapPage,
 })
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  beforeLoad: requireAuth,
+  component: SettingsPage,
+})
+
 // ── Route tree ────────────────────────────────────────────────────────────────
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -101,6 +111,7 @@ const routeTree = rootRoute.addChildren([
   inventoryRoute,
   itemDetailRoute,
   mapRoute,
+  settingsRoute,
 ])
 
 export const router = createRouter({

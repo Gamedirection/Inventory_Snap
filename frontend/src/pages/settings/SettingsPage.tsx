@@ -1,13 +1,15 @@
 import { useState } from 'react'
+import type { ChangeEvent, ElementType } from 'react'
 import {
   Settings, User, BookUser,
-  LogOut, ChevronRight, Mail, Pencil, Plus, Trash2, Phone, Building2,
+  LogOut, ChevronRight, Mail, Pencil, Plus, Trash2, Phone, Building2, Lock, ImagePlus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { AppShell } from '@/components/layout/AppShell'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useAuthStore } from '@/store/authStore'
+import { useChangePassword, useUpdateMe } from '@/api/hooks/useAuth'
 import { cn } from '@/lib/utils'
 
 type Tab = 'settings' | 'profile' | 'contacts'
@@ -30,6 +32,15 @@ function loadContacts(): Contact[] {
 
 function saveContacts(contacts: Contact[]) {
   localStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts))
+}
+
+async function readFileAsDataUrl(file: File): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read image'))
+    reader.readAsDataURL(file)
+  })
 }
 
 // ── Settings tab ─────────────────────────────────────────────────────────────
@@ -78,7 +89,7 @@ function SettingRow({
   value,
   onClick,
 }: {
-  icon: React.ElementType
+  icon: ElementType
   label: string
   value?: string
   onClick?: () => void
@@ -106,30 +117,200 @@ function SettingRow({
 
 function ProfileTab() {
   const user = useAuthStore((s) => s.user)
+  const updateMe = useUpdateMe()
+  const changePassword = useChangePassword()
+  const [displayName, setDisplayName] = useState(user?.display_name ?? '')
+  const [email, setEmail] = useState(user?.email ?? '')
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url ?? '')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  const initials = (displayName || user?.email || '?').trim()[0]?.toUpperCase() ?? '?'
+
+  const handleAvatarChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Choose an image file')
+      return
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      await updateMe.mutateAsync({ avatar_url: dataUrl })
+      setAvatarUrl(dataUrl)
+      toast.success('Profile image updated')
+    } catch {
+      toast.error('Failed to update profile image')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const handleProfileSave = async () => {
+    const nextName = displayName.trim()
+    const nextEmail = email.trim().toLowerCase()
+    if (!nextEmail) {
+      toast.error('Email is required')
+      return
+    }
+    try {
+      const updated = await updateMe.mutateAsync({
+        display_name: nextName || null,
+        email: nextEmail,
+        avatar_url: avatarUrl || null,
+      })
+      setDisplayName(updated.display_name ?? '')
+      setEmail(updated.email)
+      setAvatarUrl(updated.avatar_url ?? '')
+      toast.success('Profile updated')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail ?? 'Failed to update profile')
+    }
+  }
+
+  const handlePasswordSave = async () => {
+    if (!currentPassword || !newPassword) {
+      toast.error('Enter your current and new password')
+      return
+    }
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Password confirmation does not match')
+      return
+    }
+    try {
+      await changePassword.mutateAsync({
+        current_password: currentPassword,
+        new_password: newPassword,
+      })
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      toast.success('Password updated')
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail ?? 'Failed to update password')
+    }
+  }
 
   return (
     <div className="space-y-4">
-      {/* Avatar area */}
       <div className="flex flex-col items-center gap-3 py-6">
-        <div className="w-20 h-20 rounded-full bg-kraft-700 flex items-center justify-center">
-          <span className="text-2xl font-bold text-kraft-100">
-            {(user?.full_name ?? user?.email ?? '?')[0].toUpperCase()}
-          </span>
+        <div className="relative">
+          <div className="w-24 h-24 rounded-full bg-kraft-700 overflow-hidden flex items-center justify-center border-4 border-kraft-100 shadow-md">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-3xl font-bold text-kraft-100">{initials}</span>
+            )}
+          </div>
+          <label className="absolute -bottom-1 -right-1 w-9 h-9 rounded-full bg-kraft-50 border border-kraft-200 shadow-sm flex items-center justify-center cursor-pointer hover:bg-kraft-100 transition-colors">
+            <ImagePlus className="w-4 h-4 text-kraft-600" />
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleAvatarChange}
+            />
+          </label>
         </div>
         <div className="text-center">
-          <p className="font-semibold text-kraft-700">{user?.full_name ?? 'No name set'}</p>
-          <p className="text-sm text-kraft-400">{user?.email}</p>
+          <p className="font-semibold text-kraft-700">{displayName || 'No name set'}</p>
+          <p className="text-sm text-kraft-400">{email || user?.email}</p>
         </div>
       </div>
 
-      <div className="card divide-y divide-kraft-200 p-0 overflow-hidden">
-        <SettingRow icon={User}  label="Full name" value={user?.full_name ?? '—'} />
-        <SettingRow icon={Mail}  label="Email"     value={user?.email ?? '—'} />
+      <div className="card space-y-3">
+        <p className="section-title">Profile</p>
+        <div>
+          <label className="text-xs text-kraft-500 font-medium">Name</label>
+          <div className="relative mt-1">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-kraft-400" />
+            <input
+              className="input pl-8"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Your name"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-kraft-500 font-medium">Email</label>
+          <div className="relative mt-1">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-kraft-400" />
+            <input
+              className="input pl-8"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+            />
+          </div>
+        </div>
+        <Button
+          type="button"
+          className="w-full"
+          onClick={handleProfileSave}
+          loading={updateMe.isPending}
+        >
+          Save profile
+        </Button>
       </div>
 
-      <p className="text-xs text-kraft-400 text-center">
-        Account management coming soon.
-      </p>
+      <div className="card space-y-3">
+        <p className="section-title">Password</p>
+        <div>
+          <label className="text-xs text-kraft-500 font-medium">Current password</label>
+          <div className="relative mt-1">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-kraft-400" />
+            <input
+              className="input pl-8"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-kraft-500 font-medium">New password</label>
+          <div className="relative mt-1">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-kraft-400" />
+            <input
+              className="input pl-8"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-kraft-500 font-medium">Confirm new password</label>
+          <div className="relative mt-1">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-kraft-400" />
+            <input
+              className="input pl-8"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={handlePasswordSave}
+          loading={changePassword.isPending}
+        >
+          Update password
+        </Button>
+      </div>
     </div>
   )
 }
@@ -294,7 +475,7 @@ function ContactFormModal({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+const TABS: { id: Tab; label: string; icon: ElementType }[] = [
   { id: 'settings', label: 'Settings', icon: Settings },
   { id: 'profile',  label: 'Profile',  icon: User },
   { id: 'contacts', label: 'Contacts', icon: BookUser },
@@ -304,7 +485,7 @@ export function SettingsPage() {
   const [tab, setTab] = useState<Tab>('settings')
 
   return (
-    <AppShell headerTitle="Settings">
+    <AppShell headerTitle="Settings" showSiteSelector={false}>
       {/* Tab bar */}
       <div className="sticky top-0 z-20 bg-kraft-50 border-b border-kraft-200 px-4">
         <div className="flex max-w-lg mx-auto">

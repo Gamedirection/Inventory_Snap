@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback } from 'react'
-import { X, MapPin, Tag, Trash2, Plus, ChevronDown, PackagePlus } from 'lucide-react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
+import { X, MapPin, Tag, Trash2, Plus, ChevronDown, PackagePlus, Archive } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
-import { usePhotoDetail, usePinItem, useUnpinItem, useUpdatePhotoLocation } from '@/api/hooks/usePhotos'
+import { useDeletePhoto, usePhotoDetail, usePinItem, useUnpinItem, useUpdatePhotoLocation } from '@/api/hooks/usePhotos'
 import { useItems, useCreateItem } from '@/api/hooks/useItems'
 import { useLocationFlat } from '@/api/hooks/useLocations'
 import type { PhotoOut, PhotoPin } from '@/lib/types'
@@ -30,21 +31,43 @@ function PinOverlay({
       {pins.map((pin) => {
         if (!pin.annotation_bbox) return null
         const { x, y, width, height } = pin.annotation_bbox
+        const isPointPin = width <= 0.015 && height <= 0.015
+        const pointX = (x + width / 2) * 100
+        const pointY = (y + height / 2) * 100
         return (
           <g key={pin.pin_id} style={{ pointerEvents: canEdit ? 'all' : 'none' }}>
-            <rect
-              x={`${x * 100}%`}
-              y={`${y * 100}%`}
-              width={`${width * 100}%`}
-              height={`${height * 100}%`}
-              fill="rgba(74,124,89,0.15)"
-              stroke="#4a7c59"
-              strokeWidth="1.5"
-              rx="3"
-            />
+            {isPointPin ? (
+              <>
+                <circle
+                  cx={`${pointX}%`}
+                  cy={`${pointY}%`}
+                  r="7"
+                  fill="#4a7c59"
+                  stroke="rgba(255,255,255,0.9)"
+                  strokeWidth="2"
+                />
+                <circle
+                  cx={`${pointX}%`}
+                  cy={`${pointY}%`}
+                  r="2.5"
+                  fill="white"
+                />
+              </>
+            ) : (
+              <rect
+                x={`${x * 100}%`}
+                y={`${y * 100}%`}
+                width={`${width * 100}%`}
+                height={`${height * 100}%`}
+                fill="rgba(74,124,89,0.15)"
+                stroke="#4a7c59"
+                strokeWidth="1.5"
+                rx="3"
+              />
+            )}
             <foreignObject
-              x={`${x * 100}%`}
-              y={`${(y + height) * 100}%`}
+              x={isPointPin ? `${pointX}%` : `${x * 100}%`}
+              y={isPointPin ? `${pointY}%` : `${(y + height) * 100}%`}
               width="120"
               height="22"
               style={{ overflow: 'visible' }}
@@ -111,6 +134,7 @@ function PinItemSheet({
   const createItem = useCreateItem(siteId)
   const { data: itemData } = useItems(siteId, { search, size: 30 })
   const items = itemData?.items ?? []
+  const isPointPin = !!pendingBbox && pendingBbox.width <= 0.015 && pendingBbox.height <= 0.015
 
   const handlePin = async (itemId: string) => {
     try {
@@ -144,7 +168,7 @@ function PinItemSheet({
       {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-kraft-700">
-          {pendingBbox ? 'Pin item to selection' : 'Pin item to photo'}
+          {pendingBbox ? (isPointPin ? 'Pin item to location' : 'Pin item to selection') : 'Pin item to photo'}
         </p>
         <button onClick={onCancel} className="p-1 rounded-lg hover:bg-kraft-100">
           <X className="w-4 h-4 text-kraft-500" />
@@ -352,6 +376,8 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
   const [pinSheetOpen, setPinSheetOpen] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
   const unpinItem = useUnpinItem(siteId)
+  const updatePhoto = useUpdatePhotoLocation(siteId)
+  const deletePhoto = useDeletePhoto(siteId)
 
   const { data: detail, isLoading } = usePhotoDetail(siteId, photo?.id ?? null)
 
@@ -361,19 +387,19 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
 
   // ── Drawing helpers ──────────────────────────────────────────────────────
 
-  const getRelativePos = useCallback((e: React.MouseEvent | React.TouchEvent): { x: number; y: number } | null => {
+  const getRelativePos = useCallback((e: ReactPointerEvent<HTMLDivElement>): { x: number; y: number } | null => {
     const rect = imgRef.current?.getBoundingClientRect()
     if (!rect) return null
-    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX
-    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY
     return {
-      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
-      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
     }
   }, [])
 
-  const handlePointerDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drawMode) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
     const pos = getRelativePos(e)
     if (!pos) return
     setDrawing(true)
@@ -381,8 +407,9 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
     setDrawPreview(null)
   }, [drawMode, getRelativePos])
 
-  const handlePointerMove = useCallback((e: React.MouseEvent) => {
+  const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drawing || !drawStart) return
+    e.preventDefault()
     const pos = getRelativePos(e)
     if (!pos) return
     setDrawPreview({
@@ -393,8 +420,12 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
     })
   }, [drawing, drawStart, getRelativePos])
 
-  const handlePointerUp = useCallback((e: React.MouseEvent) => {
+  const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drawing || !drawStart) return
+    e.preventDefault()
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
     const pos = getRelativePos(e)
     if (!pos) return
     const bbox = {
@@ -411,8 +442,13 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
       setPendingBbox(bbox)
       setPinSheetOpen(true)
     } else {
-      // Tap without drawing — open pin sheet without bbox
-      setPendingBbox(null)
+      // Tap without drawing — pin to the tapped location with a point-style bbox.
+      setPendingBbox({
+        x: pos.x,
+        y: pos.y,
+        width: 0,
+        height: 0,
+      })
       setPinSheetOpen(true)
     }
   }, [drawing, drawStart, getRelativePos])
@@ -424,6 +460,32 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
       toast.success('Pin removed')
     } catch {
       toast.error('Failed to remove pin')
+    }
+  }
+
+  const handleArchivePhoto = async () => {
+    if (!photo) return
+    const confirmed = window.confirm('Archive this photo? It will be hidden from the Photos view.')
+    if (!confirmed) return
+    try {
+      await updatePhoto.mutateAsync({ photoId: photo.id, archived: true })
+      toast.success('Photo archived')
+      onClose()
+    } catch {
+      toast.error('Failed to archive photo')
+    }
+  }
+
+  const handleDeletePhoto = async () => {
+    if (!photo) return
+    const confirmed = window.confirm('Delete this photo permanently? This cannot be undone.')
+    if (!confirmed) return
+    try {
+      await deletePhoto.mutateAsync(photo.id)
+      toast.success('Photo deleted')
+      onClose()
+    } catch {
+      toast.error('Failed to delete photo')
     }
   }
 
@@ -466,23 +528,31 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="relative flex-1 flex items-center justify-center select-none">
           {imageUrl ? (
-            <div className={cn('relative inline-block', drawMode && 'cursor-crosshair')}>
+            <div
+              className={cn('relative inline-block', drawMode && 'cursor-crosshair')}
+              style={{ touchAction: drawMode ? 'none' : 'auto' }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={() => {
+                setDrawing(false)
+                setDrawStart(null)
+                setDrawPreview(null)
+              }}
+              onPointerLeave={() => {
+                if (drawing) {
+                  setDrawing(false)
+                  setDrawStart(null)
+                  setDrawPreview(null)
+                }
+              }}
+            >
               <img
                 ref={imgRef}
                 src={imageUrl}
                 alt="Photo"
                 className="max-h-[60vh] max-w-full object-contain select-none block"
                 draggable={false}
-                onMouseDown={handlePointerDown}
-                onMouseMove={handlePointerMove}
-                onMouseUp={handlePointerUp}
-                onMouseLeave={() => {
-                  if (drawing) {
-                    setDrawing(false)
-                    setDrawStart(null)
-                    setDrawPreview(null)
-                  }
-                }}
               />
               {/* Pin overlays — same size as the rendered image */}
               {detail && (
@@ -511,6 +581,24 @@ export function PhotoViewer({ siteId, photo, onClose, canEdit = true }: PhotoVie
         <div className="flex-shrink-0 bg-black/50 backdrop-blur-sm">
           {/* Location bar */}
           <div className="flex items-center gap-3 px-4 py-2">
+            {canEdit && (
+              <>
+                <button
+                  onClick={() => void handleArchivePhoto()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-kraft-200 bg-kraft-100 hover:border-kraft-300 text-xs font-medium text-kraft-600 transition-colors"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  Archive
+                </button>
+                <button
+                  onClick={() => void handleDeletePhoto()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-accent-rust/30 bg-accent-rust/10 hover:bg-accent-rust/20 text-xs font-medium text-accent-rust transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </>
+            )}
             <LocationPicker
               siteId={siteId}
               photoId={photo.id}

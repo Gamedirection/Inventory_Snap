@@ -56,15 +56,21 @@ export function useUploadPhoto(siteId: string) {
       blob,
       locationId,
       capturedAt,
+      gpsLatitude,
+      gpsLongitude,
     }: {
       blob: Blob
       locationId?: string | null
       capturedAt?: string
+      gpsLatitude?: number | null
+      gpsLongitude?: number | null
     }) => {
       const form = new FormData()
       form.append('file', blob, 'photo.jpg')
       if (locationId) form.append('location_id', locationId)
       if (capturedAt) form.append('captured_at', capturedAt)
+      if (gpsLatitude != null) form.append('gps_latitude', String(gpsLatitude))
+      if (gpsLongitude != null) form.append('gps_longitude', String(gpsLongitude))
 
       const { data } = await apiClient.post<PhotoUploadResponse>(
         `/api/v1/sites/${siteId}/photos`,
@@ -81,14 +87,22 @@ export function useBatchUploadPhotos(siteId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (
-      items: Array<{ blob: Blob; locationId?: string | null; capturedAt?: string }>
+      items: Array<{
+        blob: Blob
+        locationId?: string | null
+        capturedAt?: string
+        gpsLatitude?: number | null
+        gpsLongitude?: number | null
+      }>
     ) => {
       const results = await Promise.allSettled(
-        items.map(async ({ blob, locationId, capturedAt }) => {
+        items.map(async ({ blob, locationId, capturedAt, gpsLatitude, gpsLongitude }) => {
           const form = new FormData()
           form.append('file', blob, 'photo.jpg')
           if (locationId) form.append('location_id', locationId)
           if (capturedAt) form.append('captured_at', capturedAt)
+          if (gpsLatitude != null) form.append('gps_latitude', String(gpsLatitude))
+          if (gpsLongitude != null) form.append('gps_longitude', String(gpsLongitude))
           const { data } = await apiClient.post<PhotoUploadResponse>(
             `/api/v1/sites/${siteId}/photos`,
             form,
@@ -141,17 +155,35 @@ export function useUpdatePhotoLocation(siteId: string) {
     mutationFn: async ({
       photoId,
       locationId,
+      archived,
     }: {
       photoId: string
-      locationId: string | null
+      locationId?: string | null
+      archived?: boolean
     }) => {
+      const payload: Record<string, unknown> = {}
+      if (locationId !== undefined) payload.location_id = locationId
+      if (archived !== undefined) payload.archived = archived
       const { data } = await apiClient.patch<PhotoOut>(
         `/api/v1/sites/${siteId}/photos/${photoId}`,
-        { location_id: locationId }
+        payload
       )
       return data
     },
     onSuccess: (_data, { photoId }) => {
+      qc.invalidateQueries({ queryKey: photoKeys.all(siteId) })
+      qc.invalidateQueries({ queryKey: photoKeys.detailFull(siteId, photoId) })
+    },
+  })
+}
+
+export function useDeletePhoto(siteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (photoId: string) => {
+      await apiClient.delete(`/api/v1/sites/${siteId}/photos/${photoId}`)
+    },
+    onSuccess: (_data, photoId) => {
       qc.invalidateQueries({ queryKey: photoKeys.all(siteId) })
       qc.invalidateQueries({ queryKey: photoKeys.detailFull(siteId, photoId) })
     },

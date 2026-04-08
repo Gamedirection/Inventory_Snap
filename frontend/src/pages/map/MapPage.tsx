@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useParams } from '@tanstack/react-router'
 import {
   ChevronRight,
@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   MinusCircle,
   Trash2,
+  Archive,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -35,6 +36,8 @@ import {
   useUploadFloorMapImage,
 } from '@/api/hooks/useLocations'
 import type { ItemOut, LocationOut } from '@/lib/types'
+
+const ARCHIVED_TAG = '__archived__'
 
 interface TreeNodeProps {
   location: LocationOut
@@ -198,9 +201,13 @@ async function getImageDimensions(file: File) {
 function FloorPlanPanel({
   siteId,
   locations,
+  initialLocationId,
+  initialItemId,
 }: {
   siteId: string
   locations: LocationOut[]
+  initialLocationId?: string | null
+  initialItemId?: string | null
 }) {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null)
@@ -209,19 +216,62 @@ function FloorPlanPanel({
   const [pendingNewPin, setPendingNewPin] = useState(false)
   const [editItemOpen, setEditItemOpen] = useState(false)
 
-  const sortedLocations = useMemo(() => {
-    return [...locations].sort((a, b) => {
-      if (a.level === 'floor' && b.level !== 'floor') return -1
-      if (a.level !== 'floor' && b.level === 'floor') return 1
-      return (a.path || a.name).localeCompare(b.path || b.name)
-    })
+  const locationMap = useMemo(
+    () => new Map(locations.map((location) => [location.id, location])),
+    [locations]
+  )
+
+  const getRootFloorId = useCallback((locationId: string | null | undefined): string | null => {
+    if (!locationId) return null
+    let current = locationMap.get(locationId) ?? null
+    let fallback = current?.id ?? null
+    while (current) {
+      fallback = current.id
+      if (!current.parent_id) return current.id
+      current = locationMap.get(current.parent_id) ?? null
+    }
+    return fallback
+  }, [locationMap])
+
+  const floorLocations = useMemo(() => {
+    const topLevel = locations.filter((location) => !location.parent_id)
+    return topLevel.sort((a, b) => (a.path || a.name).localeCompare(b.path || b.name))
   }, [locations])
 
+  const [activeFloorId, setActiveFloorId] = useState<string | null>(() => getRootFloorId(initialLocationId) ?? floorLocations[0]?.id ?? null)
+
+  const sortedLocations = useMemo(() => {
+    const allowedRoot = activeFloorId
+    const scoped = locations.filter((location) => getRootFloorId(location.id) === allowedRoot)
+    return [...scoped].sort((a, b) => {
+      if ((a.level === 'floor') && (b.level !== 'floor')) return -1
+      if ((a.level !== 'floor') && (b.level === 'floor')) return 1
+      return (a.path || a.name).localeCompare(b.path || b.name)
+    })
+  }, [activeFloorId, getRootFloorId, locations])
+
   useEffect(() => {
-    if (!selectedLocationId && sortedLocations.length > 0) {
+    if (initialLocationId && locationMap.has(initialLocationId)) {
+      setSelectedLocationId(initialLocationId)
+    } else if (!selectedLocationId && sortedLocations.length > 0) {
       setSelectedLocationId(sortedLocations[0].id)
     }
-  }, [selectedLocationId, sortedLocations])
+  }, [initialLocationId, locationMap, selectedLocationId, sortedLocations])
+
+  useEffect(() => {
+    if (!activeFloorId && floorLocations.length > 0) {
+      setActiveFloorId(floorLocations[0].id)
+    }
+  }, [activeFloorId, floorLocations])
+
+  useEffect(() => {
+    if (selectedLocationId && getRootFloorId(selectedLocationId) !== activeFloorId) {
+      setSelectedLocationId(sortedLocations[0]?.id ?? null)
+      setSelectedItemId(null)
+      setSelectedPinId(null)
+      setPendingNewPin(false)
+    }
+  }, [activeFloorId, getRootFloorId, selectedLocationId, sortedLocations])
 
   const selectedLocation = sortedLocations.find((location) => location.id === selectedLocationId) ?? null
   const floorMapQuery = useFloorMap(siteId, selectedLocationId)
@@ -236,6 +286,14 @@ function FloorPlanPanel({
   )
 
   const items = itemsResponse?.items ?? []
+
+  useEffect(() => {
+    if (initialItemId && items.some((item) => item.id === initialItemId)) {
+      setSelectedItemId(initialItemId)
+      const target = items.find((item) => item.id === initialItemId)
+      setSelectedPinId(target?.pins?.[0]?.id ?? null)
+    }
+  }, [initialItemId, items])
 
   useEffect(() => {
     if (selectedItemId && !items.some((item) => item.id === selectedItemId)) {
@@ -331,6 +389,25 @@ function FloorPlanPanel({
     }
   }
 
+  const handleArchiveSelectedItem = async () => {
+    if (!selectedItem) return
+    const confirmed = window.confirm(`Archive item "${selectedItem.name}"? It will be hidden from inventory lists.`)
+    if (!confirmed) return
+    try {
+      const nextTags = Array.from(new Set([...(selectedItem.custom_tags ?? []), ARCHIVED_TAG]))
+      await patchItem.mutateAsync({
+        itemId: selectedItem.id,
+        payload: { custom_tags: nextTags },
+      })
+      setSelectedItemId(null)
+      setSelectedPinId(null)
+      setPendingNewPin(false)
+      toast.success('Item archived')
+    } catch {
+      toast.error('Failed to archive item')
+    }
+  }
+
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file || !selectedLocationId) {
@@ -364,6 +441,31 @@ function FloorPlanPanel({
   return (
     <div className="space-y-4">
       <div className="card p-4 space-y-4">
+        {floorLocations.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {floorLocations.map((floor) => (
+              <button
+                key={floor.id}
+                type="button"
+                onClick={() => {
+                  setActiveFloorId(floor.id)
+                  setSelectedLocationId(floor.id)
+                  setSelectedItemId(null)
+                  setSelectedPinId(null)
+                  setPendingNewPin(false)
+                }}
+                className={`min-w-[92px] rounded-xl border px-3 py-2 text-left transition-colors ${
+                  activeFloorId === floor.id
+                    ? 'border-kraft-700 bg-kraft-100 text-kraft-700'
+                    : 'border-kraft-200 bg-white text-kraft-500 hover:border-kraft-300'
+                }`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] opacity-70">Floor</p>
+                <p className="mt-1 text-sm font-semibold truncate">{floor.name}</p>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="flex-1">
             <label className="label">Floor plan location</label>
@@ -420,6 +522,17 @@ function FloorPlanPanel({
                 onClick={() => setEditItemOpen(true)}
               >
                 Edit Item
+              </Button>
+            )}
+            {selectedItem && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void handleArchiveSelectedItem()}
+                loading={patchItem.isPending}
+              >
+                <Archive className="w-4 h-4" />
+                Archive Item
               </Button>
             )}
             {selectedItem && (
@@ -688,7 +801,11 @@ function FloorPlanPanel({
 
 export function MapPage() {
   const { siteId } = useParams({ strict: false }) as { siteId?: string }
-  const [view, setView] = useState<ViewMode>('hierarchy')
+  const searchParams = new URLSearchParams(window.location.search)
+  const initialView = searchParams.get('view') === 'floorplan' ? 'floorplan' : 'hierarchy'
+  const initialLocationId = searchParams.get('locationId')
+  const initialItemId = searchParams.get('itemId')
+  const [view, setView] = useState<ViewMode>(initialView)
   const [addParentId, setAddParentId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
 
@@ -793,7 +910,12 @@ export function MapPage() {
               </div>
             )
           ) : (
-            <FloorPlanPanel siteId={siteId!} locations={flatLocations} />
+            <FloorPlanPanel
+              siteId={siteId!}
+              locations={flatLocations}
+              initialLocationId={initialLocationId}
+              initialItemId={initialItemId}
+            />
           )}
         </div>
       </div>

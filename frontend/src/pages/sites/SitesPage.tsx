@@ -27,7 +27,7 @@ function SiteCard({ site }: { site: SiteOut }) {
 
   const handleClick = () => {
     setActiveSite(site.id, site.name)
-    navigate({ to: `/sites/${site.id}/inventory` })
+    navigate({ to: `/sites/${site.id}` })
   }
 
   return (
@@ -83,7 +83,7 @@ function CreateSiteModal({
       setActiveSite(site.id, site.name)
       reset()
       onClose()
-      navigate({ to: `/sites/${site.id}/inventory` })
+      navigate({ to: `/sites/${site.id}` })
     } catch {
       toast.error('Failed to create site')
     }

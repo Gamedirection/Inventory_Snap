@@ -20,6 +20,7 @@ class PhotoOut(BaseModel):
     ai_status: str
     ai_provider: str | None
     ai_model: str | None
+    archived: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -39,6 +40,7 @@ class BatchUploadResponse(BaseModel):
 class PhotoUpdate(BaseModel):
     """Fields the user can update on a photo."""
     location_id: str | None = None
+    archived: bool | None = None
 
 
 class PhotoPinOut(BaseModel):

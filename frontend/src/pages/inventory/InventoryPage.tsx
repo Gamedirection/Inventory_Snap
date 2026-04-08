@@ -184,6 +184,7 @@ type Tab = 'items' | 'photos'
 function PhotosGrid({ siteId }: { siteId: string }) {
   const [viewerPhoto, setViewerPhoto] = useState<PhotoOut | null>(null)
   const { data: photos = [], isLoading } = usePhotoGallery(siteId)
+  const { data: locations = [] } = useLocationFlat(siteId)
 
   if (isLoading) {
     return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
@@ -199,11 +200,29 @@ function PhotosGrid({ siteId }: { siteId: string }) {
     )
   }
 
+  const locationMap = new Map(locations.map((location) => [location.id, location.path || location.name]))
+  const groupedPhotos = photos.reduce<Record<string, PhotoOut[]>>((groups, photo) => {
+    const key = photo.location_id ? locationMap.get(photo.location_id) ?? 'Unassigned' : 'Unassigned'
+    groups[key] ??= []
+    groups[key].push(photo)
+    return groups
+  }, {})
+
   return (
     <>
-      <div className="grid grid-cols-3 gap-2 p-4">
-        {photos.map((photo) => (
-          <PhotoCard key={photo.id} photo={photo} onClick={setViewerPhoto} />
+      <div className="space-y-5 p-4">
+        {Object.entries(groupedPhotos).map(([group, groupPhotos]) => (
+          <section key={group} className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-kraft-700">{group}</h3>
+              <span className="text-xs text-kraft-400">{groupPhotos.length}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {groupPhotos.map((photo) => (
+                <PhotoCard key={photo.id} photo={photo} onClick={setViewerPhoto} />
+              ))}
+            </div>
+          </section>
         ))}
       </div>
 

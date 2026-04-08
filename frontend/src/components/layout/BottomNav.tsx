@@ -1,6 +1,6 @@
 import type { ElementType } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { Building2, Map, Camera, ClipboardCheck, Package } from 'lucide-react'
+import { Building2, Map, Camera, Package, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSiteStore } from '@/store/siteStore'
 import { useReviewQueueCount } from '@/api/hooks/useReview'
@@ -23,12 +23,16 @@ export function BottomNav() {
   const siteBase = validSiteId ? `/sites/${validSiteId}` : null
 
   const navItems: NavItem[] = [
-    { label: 'Sites',      icon: Building2,      to: '/sites' },
-    { label: 'Map',        icon: Map,            to: siteBase ? `${siteBase}/map`       : '/sites' },
-    { label: 'Camera',     icon: Camera,         to: siteBase ? `${siteBase}/camera`    : '/sites' },
-    { label: 'Review',     icon: ClipboardCheck, to: siteBase ? `${siteBase}/review`    : '/sites',
-      badge: countData?.pending_count ?? 0 },
-    { label: 'Inventory',  icon: Package,        to: siteBase ? `${siteBase}/inventory` : '/sites' },
+    { label: 'Sites', icon: Building2, to: '/sites' },
+    { label: 'Map', icon: Map, to: siteBase ? `${siteBase}/map` : '/sites' },
+    {
+      label: 'Camera',
+      icon: Camera,
+      to: siteBase ? `${siteBase}/camera` : '/sites',
+      badge: countData?.pending_count ?? 0,
+    },
+    { label: 'Inventory', icon: Package, to: siteBase ? `${siteBase}/inventory` : '/sites' },
+    { label: 'Settings', icon: Settings, to: '/settings' },
   ]
 
   const isActive = (to: string) => currentPath.startsWith(to) && to !== '/sites'

@@ -41,6 +41,7 @@ class UserOut(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    email: EmailStr | None = None
     display_name: str | None = Field(default=None, max_length=255)
     avatar_url: str | None = None
 

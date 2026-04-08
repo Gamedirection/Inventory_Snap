@@ -156,6 +156,7 @@ class ItemSearchParams(BaseModel):
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=50, ge=1, le=200)
     updated_since: datetime | None = None  # for offline delta sync
+    include_archived: bool = False
 
 
 class PaginatedItems(BaseModel):
